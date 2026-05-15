@@ -1,0 +1,22 @@
+{
+  "name": "Cross-Chain Bridges",
+  "category": "bridge",
+  "chain": "ethereum",
+  "source": "publicznie znane glowne adresy bridges",
+  "notes": "Bridges to typowy 'next hop' po deposit do mixera albo bezposrednio po hacku. Wykrycie kontaktu z bridge = potencjalne hopping cross-chain.",
+  "addresses": [
+    {"address": "0x3ee18B2214AFF97000D974cf647E54C3979EA21A", "name": "Wormhole Token Bridge"},
+    {"address": "0x6b7a87899490EcE95443e979cA9485CBE7E71522", "name": "Multichain (Anyswap) Router"},
+    {"address": "0x8731d54E9D02c286767d56ac03e8037C07e01e98", "name": "Stargate Finance Router"},
+    {"address": "0x2796317b0fF8538F253012862c06787Adfb8cEb6", "name": "Synapse Bridge"},
+    {"address": "0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5", "name": "Across Spoke Pool (Mainnet)"},
+    {"address": "0xb8901acB165ed027E32754E0FFe830802919727f", "name": "Hop Protocol Bridge (ETH)"},
+    {"address": "0xA0c68C638235ee32657e8f720a23ceC1bFc77C77", "name": "Polygon ERC20 Bridge"},
+    {"address": "0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f", "name": "Arbitrum One Inbox"},
+    {"address": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1", "name": "Optimism L1 Standard Bridge"},
+    {"address": "0x32400084C286CF3E17e7B677ea9583e60a000324", "name": "zkSync Era Bridge"},
+    {"address": "0x49048044D57e1C92A77f79988d21Fa8fAF74E97e", "name": "Base L1 Standard Bridge"},
+    {"address": "0xa929022c9107643515f5c777ce9a910f0d1e490c", "name": "RenBridge Gateway"},
+    {"address": "0x21345e09a8fff43e8d473f4407d7a6c5c4e776a2", "name": "THORChain Router"}
+  ]
+}

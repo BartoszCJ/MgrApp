@@ -13,17 +13,22 @@ from pydantic import BaseModel, Field
 
 
 class Transaction(BaseModel):
-    """Pojedyncza transakcja Ethereum."""
+    """Pojedyncza transakcja Ethereum (normalna lub token transfer)."""
 
     hash: str = Field(description="Hash transakcji")
     block_number: int = Field(description="Numer bloku")
     timestamp: datetime = Field(description="Czas wykonania")
     from_address: str = Field(description="Adres nadawcy")
     to_address: str | None = Field(default=None, description="Adres odbiorcy (None dla creation)")
-    value_wei: str = Field(description="Wartosc w wei (string bo moze byc > 2^53)")
-    value_eth: float = Field(description="Wartosc w ETH dla wygody")
-    gas_used: int = Field(description="Zuzyty gas")
+    value_wei: str = Field(description="Wartosc w wei/jednostkach tokenu (string bo moze byc > 2^53)")
+    value_eth: float = Field(description="Wartosc w ETH lub tokenie dla wygody")
+    gas_used: int = Field(default=0, description="Zuzyty gas (0 dla token transferow)")
     is_error: bool = Field(default=False, description="Czy transakcja sie nie powiodla")
+    # Token transfer specific (None dla normalnych ETH transakcji)
+    token_symbol: str | None = Field(default=None, description="Symbol tokenu np. USDC, WETH")
+    token_name: str | None = Field(default=None, description="Pelna nazwa tokenu")
+    token_contract: str | None = Field(default=None, description="Adres kontraktu tokenu")
+    token_decimals: int | None = Field(default=None, description="Liczba miejsc po przecinku tokenu")
 
 
 class AddressLabel(BaseModel):
@@ -44,11 +49,30 @@ class TraceRequest(BaseModel):
     max_transactions: int = Field(default=50, ge=1, le=500)
 
 
+class Alert(BaseModel):
+    """Znalezisko z heurystyki - cos co warto pokazac analitykowi.
+
+    Severity:
+      - info: neutralna obserwacja (np. "duza koncentracja transferow w 1 bloku")
+      - warning: cos podejrzanego ale nie pewnego (np. "adres mial kontakt z bridge")
+      - critical: pewny problem (np. "deposit do Tornado Cash - srodki zostaja ukryte")
+    """
+
+    type: str = Field(description="np. 'tornado_cash_deposit', 'tornado_cash_withdraw'")
+    severity: str = Field(description="info | warning | critical")
+    title: str = Field(description="Krotki tytul, np. 'Deposit do Tornado Cash 100 ETH'")
+    message: str = Field(description="Pelniejsze wyjasnienie")
+    related_addresses: list[str] = Field(default_factory=list)
+    related_tx_hashes: list[str] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
+
+
 class TraceResult(BaseModel):
-    """Wynik sledzenia: graf transakcji + etykiety."""
+    """Wynik sledzenia: graf transakcji + etykiety + alerty z heurystyk."""
 
     root_address: str
     transactions: list[Transaction]
     labels: list[AddressLabel] = Field(default_factory=list)
+    alerts: list[Alert] = Field(default_factory=list)
     total_transactions: int = 0
     notes: list[str] = Field(default_factory=list)
