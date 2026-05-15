@@ -1,11 +1,18 @@
-"""Klient Etherscan API.
+"""Klient Etherscan API V2 (multichain).
 
 Co to robi:
 - pobiera transakcje danego adresu Ethereum,
 - konwertuje surowe dane Etherscan do naszych modeli pydantic,
 - bazowy klient na ktorym oprzemy graf.
 
-Dokumentacja Etherscan: https://docs.etherscan.io/
+Dokumentacja Etherscan V2: https://docs.etherscan.io/etherscan-v2
+V1 -> V2: https://docs.etherscan.io/v2-migration
+
+Roznica V1 vs V2:
+- V1 URL: https://api.etherscan.io/api
+- V2 URL: https://api.etherscan.io/v2/api z parametrem chainid
+- chainid=1 dla Ethereum mainnet, 56 dla BSC, 137 dla Polygon, 42161 dla Arbitrum itd.
+- V1 zostal deprecated 31 maja 2025.
 """
 
 from datetime import datetime, timezone
@@ -17,7 +24,8 @@ from loguru import logger
 from forensics.config import settings
 from forensics.core.models import Transaction
 
-ETHERSCAN_BASE_URL = "https://api.etherscan.io/api"
+ETHERSCAN_BASE_URL = "https://api.etherscan.io/v2/api"
+ETHEREUM_MAINNET_CHAIN_ID = 1
 WEI_PER_ETH = Decimal(10**18)
 
 
@@ -26,10 +34,16 @@ class EtherscanError(Exception):
 
 
 class EtherscanClient:
-    """Cienki klient nad Etherscan API."""
+    """Cienki klient nad Etherscan API V2."""
 
-    def __init__(self, api_key: str | None = None, timeout: float = 10.0):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        chain_id: int = ETHEREUM_MAINNET_CHAIN_ID,
+        timeout: float = 10.0,
+    ):
         self.api_key = api_key or settings.etherscan_api_key
+        self.chain_id = chain_id
         if not self.api_key:
             logger.warning("Brak ETHERSCAN_API_KEY - bedzie dzialac z rate limitem 1 req / 5s")
         self.client = httpx.AsyncClient(timeout=timeout)
@@ -55,6 +69,7 @@ class EtherscanClient:
             sort: 'asc' lub 'desc' wg blockNumber.
         """
         params = {
+            "chainid": self.chain_id,
             "module": "account",
             "action": "txlist",
             "address": address,
@@ -66,7 +81,13 @@ class EtherscanClient:
             "apikey": self.api_key,
         }
 
-        logger.info("Etherscan txlist for {} (page={}, offset={})", address, page, offset)
+        logger.info(
+            "Etherscan V2 txlist for {} (chain={}, page={}, offset={})",
+            address,
+            self.chain_id,
+            page,
+            offset,
+        )
         response = await self.client.get(ETHERSCAN_BASE_URL, params=params)
         response.raise_for_status()
         data = response.json()
