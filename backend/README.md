@@ -20,11 +20,18 @@ copy .env.example .env
 ## Uruchomienie
 
 ```powershell
-# API
-uv run uvicorn forensics.api:app --reload --port 8000
+# API (skrocone - z auto-reloadem na port 8000)
+uv run forensics serve
 
-# CLI (na razie tylko hello, beda dalsze komendy)
+# z innym portem / bez reloadu
+uv run forensics serve --port 8001 --no-reload
+
+# CLI
 uv run forensics --help
+uv run forensics trace 0x098B716B8Aaf21512996dC57EB0615e2383E2f96 --max 20
+
+# Alternatywnie (bez CLI, surowy uvicorn)
+uv run uvicorn forensics.api:app --reload --port 8000
 ```
 
 ## Struktura

@@ -28,8 +28,9 @@ export type AddressLabel = {
 
 export type TraceRequest = {
   address: string;
-  max_depth?: number;
+  hops?: number;
   max_transactions?: number;
+  max_per_hop?: number;
 };
 
 export type Alert = {
@@ -42,11 +43,37 @@ export type Alert = {
   metadata: Record<string, unknown>;
 };
 
+export type GraphNode = {
+  address: string;
+  depth: number;
+  tx_count: number;
+  is_endpoint: boolean;
+  is_root: boolean;
+};
+
+export type GraphEdge = {
+  source: string;
+  target: string;
+  tx_hash: string;
+  value: number;
+  token: string | null;
+  block: number;
+};
+
+export type TraceGraph = {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  root_address: string;
+  hops: number;
+  fetched_addresses: number;
+};
+
 export type TraceResult = {
   root_address: string;
   transactions: Transaction[];
   labels: AddressLabel[];
   alerts: Alert[];
+  graph: TraceGraph | null;
   total_transactions: number;
   notes: string[];
 };

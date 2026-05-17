@@ -44,6 +44,23 @@ def trace(
 
 
 @app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Adres na ktorym sluchamy"),
+    port: int = typer.Option(8000, "--port", "-p", help="Port"),
+    reload: bool = typer.Option(True, "--reload/--no-reload", help="Auto-reload przy zmianie kodu"),
+) -> None:
+    """Odpal serwer FastAPI (uvicorn). Skrot na `uv run uvicorn forensics.api:app --reload`."""
+    import uvicorn
+
+    uvicorn.run(
+        "forensics.api:app",
+        host=host,
+        port=port,
+        reload=reload,
+    )
+
+
+@app.command()
 def version() -> None:
     """Wypisz wersje."""
     from forensics import __version__

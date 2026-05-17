@@ -17,6 +17,7 @@ from forensics import __version__
 from forensics.clients.arkham import ArkhamClient, ArkhamError
 from forensics.clients.etherscan import EtherscanClient, EtherscanError
 from forensics.config import settings
+from forensics.core.graph import build_trace_graph
 from forensics.core.models import TraceRequest, TraceResult
 from forensics.heuristics.known_address import detect_known_group
 from forensics.heuristics.tornado import detect_tornado
@@ -59,44 +60,41 @@ async def root() -> dict[str, str]:
 
 @app.post("/api/trace", response_model=TraceResult)
 async def trace(request: TraceRequest) -> TraceResult:
-    """Pobierz transakcje (ETH + ERC-20) dla adresu + etykiety z Arkham.
+    """Pobierz BFS graf przeplywu dla adresu + etykiety z Arkham + heurystyki.
 
     Krok po kroku:
-      1. Etherscan rownolegle: normalne transakcje (`txlist`) + token transfers (`tokentx`).
-         Token transfers sa kluczowe bo wiekszosc ruchu z hackow to USDC/USDT/WETH.
-      2. Merge + sortowanie po block_number desc, obciecie do `max_transactions`.
-      3. Zbieramy unikalne adresy (root + from + to z transakcji).
-      4. Arkham batch lookup: pytamy o etykiete dla kazdego adresu rownolegle.
-      5. Zwracamy TraceResult z transakcjami, etykietami i notatkami.
-
-    W kolejnych iteracjach:
-      - graf BFS do `max_depth`,
-      - detekcje mixerow / bridge / CEX deposit (heurystyki).
+      1. BFS przez `request.hops` poziomow - dla kazdego nowego adresu pobieramy
+         tx z Etherscan (ETH + ERC-20). Znane endpointy (mixer/CEX/bridge) sa terminale.
+      2. Zbieramy unikalne adresy z wszystkich poziomow.
+      3. Arkham batch lookup: pytamy o etykiete dla kazdego adresu rownolegle.
+      4. Heurystyki: Tornado Cash / bridges / CEX deposits na pelnym zestawie tx.
+      5. Tabela transakcji w UI to nadal ostatnie N z hop 0 (zeby nie zalac UI).
     """
     address = request.address.lower()
-    half = max(request.max_transactions // 2, 25)
 
     try:
-        normal_txs, token_txs = await asyncio.gather(
-            app.state.etherscan.get_normal_transactions(address=address, offset=half),
-            app.state.etherscan.get_token_transfers(address=address, offset=half),
+        all_txs, graph = await build_trace_graph(
+            etherscan=app.state.etherscan,
+            root_address=address,
+            hops=request.hops,
+            root_max_tx=request.max_transactions,
+            per_hop_max_tx=request.max_per_hop,
         )
     except EtherscanError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    # Merge + sortuj po block_number desc, ogranicz do max
-    combined = sorted(
-        [*normal_txs, *token_txs],
-        key=lambda t: t.block_number,
-        reverse=True,
-    )[: request.max_transactions]
+    # Tabela: bierzemy tx tylko dla roota (zeby tabela nie miala 2000 wierszy z hop 2+)
+    root_txs = [
+        tx
+        for tx in all_txs
+        if tx.from_address == address or (tx.to_address or "") == address
+    ]
+    root_txs = sorted(root_txs, key=lambda t: t.block_number, reverse=True)[
+        : request.max_transactions
+    ]
 
-    # Zbierz unikalne adresy do labelowania (root + from + to)
-    addresses_to_label: set[str] = {address}
-    for tx in combined:
-        addresses_to_label.add(tx.from_address)
-        if tx.to_address:
-            addresses_to_label.add(tx.to_address)
+    # Zbierz wszystkie unikalne adresy z grafu do Arkham lookup
+    addresses_to_label: set[str] = {node.address for node in graph.nodes}
 
     notes: list[str] = []
     labels_map: dict = {}
@@ -108,27 +106,29 @@ async def trace(request: TraceRequest) -> TraceResult:
         logger.warning("Arkham batch failed: {}", exc)
         notes.append("Arkham batch failed (zobacz logi backendu).")
 
-    # Heurystyki - lista rosnie z czasem.
+    # Heurystyki na pelnym zestawie tx (caly graf, nie tylko hop 0)
     alerts = [
-        *detect_tornado(combined, address),
-        *detect_known_group(combined, address, "bridges.json", severity="warning"),
-        *detect_known_group(combined, address, "cex.json", severity="warning"),
+        *detect_tornado(all_txs, address),
+        *detect_known_group(all_txs, address, "bridges.json", severity="warning"),
+        *detect_known_group(all_txs, address, "cex.json", severity="warning"),
     ]
-    # critical -> warning -> info na gorze
     severity_order = {"critical": 0, "warning": 1, "info": 2}
     alerts.sort(key=lambda a: (severity_order.get(a.severity, 3), -a.metadata.get("last_block", 0)))
 
     notes.append(
-        f"Etherscan: {len(normal_txs)} ETH + {len(token_txs)} ERC-20 (merged: {len(combined)}). "
+        f"BFS hops={request.hops}: {graph.fetched_addresses} adresow zapytanych, "
+        f"{len(graph.nodes)} wezlow, {len(graph.edges)} krawedzi. "
+        f"Wszystkich tx (do heurystyk): {len(all_txs)}. "
         f"Arkham: {len(labels_map)} etykiet z {len(addresses_to_label)} adresow. "
         f"Heurystyki: {len(alerts)} alertow."
     )
 
     return TraceResult(
         root_address=address,
-        transactions=combined,
+        transactions=root_txs,
         labels=list(labels_map.values()),
         alerts=alerts,
-        total_transactions=len(combined),
+        graph=graph,
+        total_transactions=len(root_txs),
         notes=notes,
     )

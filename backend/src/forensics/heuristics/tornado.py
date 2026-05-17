@@ -2,9 +2,9 @@
 
 Co to robi:
 - laduje liste znanych adresow Tornado Cash z `data/known_addresses/tornado_cash.json`,
-- dla podanego adresu root i listy transakcji:
-  - jesli `to_address` == Tornado pool/router -> deposit (sledzony adres oddaje srodki do mieszalni),
-  - jesli `from_address` == Tornado pool/router -> withdraw (sledzony adres dostaje srodki z mieszalni),
+- dla podanego adresu root i listy transakcji wykrywa:
+  - deposit: `to_address` == Tornado pool/router,
+  - withdraw: `from_address` == Tornado pool/router,
 - zwraca liste Alert.
 
 Co to znaczy w praktyce:
@@ -114,10 +114,7 @@ def detect_tornado(transactions: list[Transaction], root_address: str) -> list[A
         kind = agg["kind"]
         count = agg["count"]
 
-        if kind == "pool" and denom is not None:
-            denom_str = f"pula {denom} {asset}"
-        else:
-            denom_str = f"{kind}"
+        denom_str = f"pula {denom} {asset}" if kind == "pool" and denom is not None else kind
 
         if direction == "deposit":
             title = f"Deposit do Tornado Cash ({denom_str}, {count} tx)"

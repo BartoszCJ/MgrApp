@@ -16,26 +16,36 @@ MagisterkaApp/
 
 ## Quick Start
 
-### Backend
+### Setup (jednorazowo)
 
 ```powershell
-cd backend
-uv sync
-uv run uvicorn forensics.api:app --reload --port 8000
+cd C:\Users\Bartosz\Desktop\MagisterkaApp
+npm install            # instaluje 'concurrently' w roocie
+npm run install:all    # instaluje deps backend (uv) + frontend (npm)
 ```
 
-Backend: http://localhost:8000
-Swagger UI: http://localhost:8000/docs
+### Dev (codziennie)
 
-### Frontend
+**Jedna komenda odpalajaca backend + frontend rownolegle:**
 
 ```powershell
-cd frontend
-npm install
 npm run dev
 ```
 
-Frontend: http://localhost:3000
+- Backend: http://localhost:8000 (Swagger UI: http://localhost:8000/docs)
+- Frontend: http://localhost:3000
+
+Ctrl+C zabija oba procesy naraz.
+
+### Inne skrypty
+
+```powershell
+npm run dev:backend    # tylko backend
+npm run dev:frontend   # tylko frontend
+npm run build:frontend # produkcyjny build Next.js
+npm run test:backend   # pytest
+npm run lint:backend   # ruff check
+```
 
 ## Stack
 

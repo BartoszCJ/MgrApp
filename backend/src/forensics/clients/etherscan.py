@@ -15,8 +15,9 @@ Roznica V1 vs V2:
 - V1 zostal deprecated 31 maja 2025.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TypeAlias
 
 import httpx
 from loguru import logger
@@ -27,6 +28,7 @@ from forensics.core.models import Transaction
 ETHERSCAN_BASE_URL = "https://api.etherscan.io/v2/api"
 ETHEREUM_MAINNET_CHAIN_ID = 1
 WEI_PER_ETH = Decimal(10**18)
+QueryParamValue: TypeAlias = str | int | float | bool | None
 
 
 class EtherscanError(Exception):
@@ -68,7 +70,7 @@ class EtherscanClient:
             page / offset: paginacja (offset = ile na strone, max 10000).
             sort: 'asc' lub 'desc' wg blockNumber.
         """
-        params = {
+        params: dict[str, QueryParamValue] = {
             "chainid": self.chain_id,
             "module": "account",
             "action": "txlist",
@@ -117,7 +119,7 @@ class EtherscanClient:
         Dla hackera Ronin Bridge `txlist` pokazuje glownie 0.0000 ETH wywolan contractowych,
         a prawdziwy ruch (~$625M) byl w USDC/WETH - widoczny tylko przez `tokentx`.
         """
-        params = {
+        params: dict[str, QueryParamValue] = {
             "chainid": self.chain_id,
             "module": "account",
             "action": "tokentx",
@@ -158,7 +160,7 @@ class EtherscanClient:
         return Transaction(
             hash=raw["hash"],
             block_number=int(raw["blockNumber"]),
-            timestamp=datetime.fromtimestamp(int(raw["timeStamp"]), tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(int(raw["timeStamp"]), tz=UTC),
             from_address=raw["from"].lower(),
             to_address=(raw.get("to") or "").lower() or None,
             value_wei=str(value_wei),
@@ -184,7 +186,7 @@ class EtherscanClient:
         return Transaction(
             hash=raw["hash"],
             block_number=int(raw["blockNumber"]),
-            timestamp=datetime.fromtimestamp(int(raw["timeStamp"]), tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(int(raw["timeStamp"]), tz=UTC),
             from_address=raw["from"].lower(),
             to_address=(raw.get("to") or "").lower() or None,
             value_wei=str(raw_value),

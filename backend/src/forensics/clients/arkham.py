@@ -12,7 +12,8 @@ Rate limit basic tier: ~20 req/s.
 
 UWAGA: format response Arkhama nie jest super dobrze udokumentowany publicznie.
 Klient stara sie wyciagnac to co najwazniejsze (entity name, type) i ignorowac reszte.
-Jesli adres jest nieznany, Arkham moze zwrocic 404, 200 z pustym body, albo strukture bez `arkhamEntity`.
+Jesli adres jest nieznany, Arkham moze zwrocic 404, 200 z pustym body,
+albo strukture bez `arkhamEntity`.
 """
 
 import asyncio
@@ -174,16 +175,38 @@ class ArkhamClient:
         """
         candidates = " ".join(filter(None, [entity_type, entity_name, label_name])).lower()
 
-        hacker_kw = ("exploiter", "exploit", "hacker", "drainer", "scam", "lazarus", "ofac", "sanction", "north korea")
+        hacker_kw = (
+            "exploiter",
+            "exploit",
+            "hacker",
+            "drainer",
+            "scam",
+            "lazarus",
+            "ofac",
+            "sanction",
+            "north korea",
+        )
         if any(k in candidates for k in hacker_kw):
             return "hacker"
         if any(k in candidates for k in ("mixer", "tornado", "wasabi", "samourai")):
             return "mixer"
-        if any(k in candidates for k in ("bridge", "wormhole", "multichain", "synapse", "stargate")):
+        bridge_kw = ("bridge", "wormhole", "multichain", "synapse", "stargate")
+        if any(k in candidates for k in bridge_kw):
             return "bridge"
+        cex_kw = (
+            "cex",
+            "exchange",
+            "binance",
+            "coinbase",
+            "kraken",
+            "okx",
+            "bybit",
+            "kucoin",
+            "hot wallet",
+        )
         if any(
             k in candidates
-            for k in ("cex", "exchange", "binance", "coinbase", "kraken", "okx", "bybit", "kucoin", "hot wallet")
+            for k in cex_kw
         ):
             return "cex"
         if entity_type:
