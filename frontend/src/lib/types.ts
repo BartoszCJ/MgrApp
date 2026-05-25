@@ -31,6 +31,31 @@ export type TraceRequest = {
   hops?: number;
   max_transactions?: number;
   max_per_hop?: number;
+  start_block?: number | null;
+  end_block?: number | null;
+  case_name?: string | null;
+};
+
+export type MetricsReport = {
+  case_name: string;
+  address_recall: number; // 0-1
+  heuristic_precision: number; // 0-1
+  heuristic_recall: number; // 0-1
+  cex_coverage: number; // 0-1
+  latency_seconds: number;
+  breakdown: {
+    addresses_found?: number;
+    addresses_expected?: number;
+    addresses_in_trace?: number;
+    heuristics_hit?: string[];
+    heuristics_expected?: string[];
+    heuristics_false_positives?: string[];
+    heuristics_missing?: string[];
+    cex_exchanges_found?: string[];
+    cex_exchanges_expected?: string[];
+    [k: string]: unknown;
+  };
+  notes: string[];
 };
 
 export type Alert = {
@@ -76,4 +101,5 @@ export type TraceResult = {
   graph: TraceGraph | null;
   total_transactions: number;
   notes: string[];
+  metrics: MetricsReport | null;
 };

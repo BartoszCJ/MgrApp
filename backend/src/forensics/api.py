@@ -6,7 +6,7 @@ Co to robi:
 - dokumentacja automatycznie pod /docs (Swagger UI).
 """
 
-import asyncio
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -20,7 +20,9 @@ from forensics.config import settings
 from forensics.core.graph import build_trace_graph
 from forensics.core.models import TraceRequest, TraceResult
 from forensics.heuristics.known_address import detect_known_group
+from forensics.heuristics.peel_chain import detect_peel_chain
 from forensics.heuristics.tornado import detect_tornado
+from forensics.metrics import GroundTruthError, compute_metrics
 
 
 @asynccontextmanager
@@ -71,6 +73,7 @@ async def trace(request: TraceRequest) -> TraceResult:
       5. Tabela transakcji w UI to nadal ostatnie N z hop 0 (zeby nie zalac UI).
     """
     address = request.address.lower()
+    started_at = time.perf_counter()
 
     try:
         all_txs, graph = await build_trace_graph(
@@ -79,6 +82,8 @@ async def trace(request: TraceRequest) -> TraceResult:
             hops=request.hops,
             root_max_tx=request.max_transactions,
             per_hop_max_tx=request.max_per_hop,
+            start_block=request.start_block,
+            end_block=request.end_block,
         )
     except EtherscanError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -111,19 +116,27 @@ async def trace(request: TraceRequest) -> TraceResult:
         *detect_tornado(all_txs, address),
         *detect_known_group(all_txs, address, "bridges.json", severity="warning"),
         *detect_known_group(all_txs, address, "cex.json", severity="warning"),
+        *detect_peel_chain(all_txs, address),
     ]
     severity_order = {"critical": 0, "warning": 1, "info": 2}
     alerts.sort(key=lambda a: (severity_order.get(a.severity, 3), -a.metadata.get("last_block", 0)))
+
+    window_note = ""
+    if request.start_block is not None or request.end_block is not None:
+        window_note = (
+            f" Okno incydentu: bloki {request.start_block or 0}-"
+            f"{request.end_block or 'latest'}."
+        )
 
     notes.append(
         f"BFS hops={request.hops}: {graph.fetched_addresses} adresow zapytanych, "
         f"{len(graph.nodes)} wezlow, {len(graph.edges)} krawedzi. "
         f"Wszystkich tx (do heurystyk): {len(all_txs)}. "
         f"Arkham: {len(labels_map)} etykiet z {len(addresses_to_label)} adresow. "
-        f"Heurystyki: {len(alerts)} alertow."
+        f"Heurystyki: {len(alerts)} alertow.{window_note}"
     )
 
-    return TraceResult(
+    result = TraceResult(
         root_address=address,
         transactions=root_txs,
         labels=list(labels_map.values()),
@@ -132,3 +145,15 @@ async def trace(request: TraceRequest) -> TraceResult:
         total_transactions=len(root_txs),
         notes=notes,
     )
+
+    if request.case_name:
+        latency = time.perf_counter() - started_at
+        try:
+            result.metrics = compute_metrics(result, request.case_name, latency)
+        except GroundTruthError as exc:
+            notes.append(f"Metryki niedostepne: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("compute_metrics failed for case={}: {}", request.case_name, exc)
+            notes.append(f"Metryki failed: {exc}")
+
+    return result

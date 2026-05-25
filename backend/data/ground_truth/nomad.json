@@ -1,0 +1,118 @@
+{
+  "case": "Nomad Bridge",
+  "date": "2022-08-01",
+  "attack_block": 15259101,
+  "attribution": "Pierwszy exploiter: Alexander Gurevich (aresztowany w Izraelu, ekstradycja do USA 2024). Pozniej free-for-all - 88+ copycats.",
+  "stolen_value_usd": 190000000,
+  "stolen_assets": [
+    {"asset": "USDC", "notes": "dominujaca czesc skradzionych srodkow"},
+    {"asset": "WBTC", "notes": "wiele transakcji po 100 WBTC"},
+    {"asset": "WETH", "notes": "wymieniane na Uniswap z WBTC"},
+    {"asset": "FRAX"},
+    {"asset": "CQT"},
+    {"asset": "HBOT"},
+    {"asset": "IAG"},
+    {"asset": "DAI"},
+    {"asset": "CARDS"},
+    {"asset": "SDL"}
+  ],
+  "summary": "Pierwszy bridge hack typu 'free-for-all'. Routine upgrade kontraktu proxy Nomad ustawil zerowy hash jako trusted root, co pozwolilo na replay attack: kazdy kto rozumial format wiadomosci mogl podmienic adres odbiorcy i powtorzyc transakcje exploitu na swoje konto. W ciagu kilku godzin 88+ unikalnych adresow wydrenowalo bridge. Mandiant zidentyfikowal 4 klastry (Group A-D). Kluczowy case dla pracy magisterskiej: pokazuje ze klasyczne sledzenie 'jednego hackera' nie wystarcza - trzeba modelu wieloagentowego.",
+  "sources": [
+    "https://medium.com/the-coinbase-blog/nomad-bridge-incident-analysis-899b425b0f34",
+    "https://cloud.google.com/blog/topics/threat-intelligence/dissecting-nomad-bridge-hack",
+    "https://www.elliptic.co/blog/analysis/nomad-loses-156-million-in-seventh-major-crypto-bridge-exploit-of-2022",
+    "https://www.trmlabs.com/resources/blog/key-suspect-in-190m-nomad-bridge-exploit-extradited-to-the-united-states",
+    "https://medium.com/numen-cyber-labs/nomadic-bridge-attack-incident-analysis-94716b93fa61"
+  ],
+  "addresses": {
+    "bridge_contract": [
+      {
+        "address": "0x88A69B4E698A4B090DF6CF5Bd7B2D47325Ad30A3",
+        "role": "vulnerable_bridge",
+        "notes": "Nomad ERC20 Bridge - ofiara replay attack. Adres z ktorego wyciaganto srodki."
+      }
+    ],
+    "attacker_root": [
+      {
+        "address": "0x56D8B635A7C88Fd1104D23d632AF40c1C3Aac4e3",
+        "role": "primary_attacker",
+        "label": "Nomad Bridge Exploiter 1",
+        "notes": "Alexander Gurevich (wg US prosecutors). Pierwsza transakcja w bloku 15259101. Ukradl 100 WBTC + wymienil na WETH na Uniswap. Lider klastra (>$62M volume). Wykorzystywal flashbots i helper contract."
+      },
+      {
+        "address": "0x847e74D8cd0d4Bc2716A6382736ae2870dB94148",
+        "role": "early_attacker",
+        "notes": "Druga transakcja w tym samym bloku 15259101. Ukradl 100 WBTC. Helper contract 0x000000000000660def84e69995117c0176ba446e. Tez przez flashbots."
+      },
+      {
+        "address": "0xB5c55F76f90Cc528B2609109Ca14d8d84593590e",
+        "role": "early_attacker",
+        "notes": "Trzecia transakcja, bezposrednie wywolanie kontraktu (public mempool, nie flashbots). Ukradl 100 WBTC."
+      },
+      {
+        "address": "0xa8c83B1b30291A3a1a118058b5445cC83041Cd9d",
+        "role": "tester_attacker",
+        "label": "bitliq.eth",
+        "notes": "Testowal vulnerability dzien wczesniej (31 lipca). Ukradl 100 WBTC w bloku 15259101. Czesciowo zwrocil (100 ETH), reszte wymienial na renBTC."
+      }
+    ],
+    "exploit_contracts": [
+      {
+        "address": "0xF57113D8F6Ff35747737F026Fe0b37D4d7F42777",
+        "role": "exploit_helper",
+        "notes": "Helper contract pierwszego exploitera (Gurevich) do obfuskacji"
+      },
+      {
+        "address": "0x000000000000660DEF84e69995117C0176BA446E",
+        "role": "exploit_helper",
+        "notes": "Helper contract drugiego exploitera"
+      },
+      {
+        "address": "0xB88189cd5168C4676BD93E9768497155956F8445",
+        "role": "exploit_helper",
+        "notes": "Inny helper contract uzyty przez ekipe exploiterow"
+      }
+    ],
+    "destinations_observed": [
+      {
+        "address": "tornado_cash_pools",
+        "role": "mixer_destinations",
+        "notes": "Group B (Rari Capital exploit-linked, ~$4M) i Group D (~$54.5M) wyslaly srodki do Tornado Cash. Nie podajemy konkretnych adresow Tornado tu - sa juz w known_addresses/tornado_cash.json."
+      },
+      {
+        "address": "renBTC_bridge",
+        "role": "cross_chain_destination",
+        "notes": "Bitliq.eth wymienial WETH na renBTC (cross-chain bridge do Bitcoin). Powtorzony wzorzec z Lazarus playbooka."
+      }
+    ]
+  },
+  "expected_heuristic_hits": {
+    "tornado_cash": {
+      "expected": true,
+      "notes": "Group B (~$4M) i Group D (~$54.5M) potwierdzeni jako Tornado users. Group A (whitehat) zwrocila czesc, Group C uzywala Uniswap + Tornado."
+    },
+    "cex": {
+      "expected": "partial",
+      "notes": "Nieoczywiste - 'many of the attackers used traceable addresses with identifying information', co sugeruje ze niektore amatorskie copycats mogly trafic na CEX. Bardziej zaawansowani uzywali Tornado."
+    },
+    "bridges": {
+      "expected": true,
+      "notes": "renBTC i inne bridges uzywane przez kilka adresow. Cross-chain hopping standardowy wzorzec."
+    },
+    "peel_chain": {
+      "expected": false,
+      "notes": "Wzor 'free-for-all' nie pasuje do klasycznego peel chain. Splity raczej przez Tornado niz peel."
+    }
+  },
+  "ground_truth_metrics": {
+    "total_attacker_root_addresses": 4,
+    "total_exploit_contracts": 3,
+    "estimated_unique_exploiters": 88,
+    "fund_status_pct": {
+      "stationary": 34,
+      "moved_further": 49,
+      "returned": 17
+    },
+    "notes": "Trudniejszy case dla metryk - wiele rownoleglych atakujacych zamiast jednego. Mozna oceniac per klaster (Group A/B/C/D)."
+  }
+}

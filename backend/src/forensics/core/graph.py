@@ -5,7 +5,7 @@ Co to robi:
 - iteruje BFS przez `hops` poziomow,
 - dla kazdego adresu pobiera transakcje (ETH + ERC-20) przez Etherscan,
 - zbiera unikalne adresy do `nodes` i transakcje jako `edges`,
-- pomija (nie ekspanduje dalej) znanych terminali (Tornado/CEX/bridge) bo to naturalne konce sledzenia.
+- pomija (nie ekspanduje dalej) znanych terminali (Tornado/CEX/bridge) - naturalne konce sledzenia.
 
 Czemu BFS a nie DFS:
 - BFS gwarantuje ze wszystkie wezly na poziomie `n` sa znalezione zanim ruszymy na `n+1`,
@@ -68,8 +68,15 @@ async def build_trace_graph(
     hops: int = 2,
     root_max_tx: int = 50,
     per_hop_max_tx: int = 20,
+    start_block: int | None = None,
+    end_block: int | None = None,
 ) -> tuple[list[Transaction], TraceGraph]:
     """BFS przez `hops` poziomow z root_address.
+
+    Args:
+        start_block / end_block: opcjonalne okno blokow (np. doba ataku).
+            Przekazywane do Etherscan dla kazdego adresu, dzieki czemu BFS
+            pobiera tylko tx z okna incydentu zamiast najnowszych transakcji.
 
     Returns:
         (wszystkie_zebrane_transakcje, TraceGraph)
@@ -107,10 +114,25 @@ async def build_trace_graph(
 
         # Pobierz transakcje adresu
         limit = root_max_tx if addr == root else per_hop_max_tx
+        sb = start_block if start_block is not None else 0
+        eb = end_block if end_block is not None else 99_999_999
+        sort_order = "asc" if start_block is not None else "desc"
         try:
             normal, tokens = await asyncio.gather(
-                etherscan.get_normal_transactions(addr, offset=limit // 2 or 10),
-                etherscan.get_token_transfers(addr, offset=limit // 2 or 10),
+                etherscan.get_normal_transactions(
+                    addr,
+                    start_block=sb,
+                    end_block=eb,
+                    offset=limit // 2 or 10,
+                    sort=sort_order,
+                ),
+                etherscan.get_token_transfers(
+                    addr,
+                    start_block=sb,
+                    end_block=eb,
+                    offset=limit // 2 or 10,
+                    sort=sort_order,
+                ),
             )
         except EtherscanError as exc:
             logger.warning("Etherscan blad dla {} (depth={}): {}", addr, depth, exc)

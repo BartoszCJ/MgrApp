@@ -1,0 +1,83 @@
+{
+  "case": "Ronin Bridge",
+  "date": "2022-03-23",
+  "attack_block": 14442835,
+  "attribution": "Lazarus Group (DPRK) - potwierdzone przez US Treasury OFAC i Chainalysis",
+  "stolen_value_usd": 625000000,
+  "stolen_assets": [
+    {"asset": "ETH", "amount": 173600},
+    {"asset": "USDC", "amount": 25500000}
+  ],
+  "summary": "Najwiekszy hack DeFi w historii do tamtego momentu. Atakujacy przejal 5 z 9 kluczy validatorow Ronin Bridge (sidechain Axie Infinity) i wykonal dwie transakcje wyplacajace 173,600 ETH oraz 25.5M USDC. Lazarus uzyl ponad 12,000 adresow do prania, glownie przez Tornado Cash a po sankcjach OFAC (sierpien 2022) przez chain-hopping i bridges. Chainalysis i organy scigania odzyskaly ponad $30M.",
+  "sources": [
+    "https://github.com/tayvano/lazarus-bluenoroff-research/blob/main/hacks-and-thefts/ronin_bridge.md",
+    "https://www.chainalysis.com/blog/axie-infinity-ronin-bridge-dprk-hack-seizure/",
+    "https://www.elliptic.co/blog/540-million-stolen-from-the-ronin-defi-bridge",
+    "https://www.chainalysis.com/blog/tornado-cash-ofac-designation-sanctions/"
+  ],
+  "addresses": {
+    "attacker_root": [
+      {
+        "address": "0x098B716B8Aaf21512996dC57EB0615e2383E2f96",
+        "role": "primary_attacker",
+        "notes": "Glowny portfel atakujacego - pierwsze miejsce gdzie trafily wyplacone ETH i USDC z Ronin Bridge"
+      }
+    ],
+    "intermediaries_to_tornado": [
+      {"address": "0xf7B31119c2682c88d88D455dBb9d5932c65Cf1bE", "role": "intermediate_to_tornado"},
+      {"address": "0x35Fb6f6DB4fb05e6A4cE86F2C93691425626d4b1", "role": "intermediate_to_tornado"},
+      {"address": "0x53b6936513e738f44FB50d2b9476730C0Ab3Bfc1", "role": "intermediate_to_tornado"},
+      {"address": "0x08723392Ed15743cc38513C4925f5e6be5c17243", "role": "intermediate_to_tornado"},
+      {"address": "0x3E37627dEAA754090fBFbb8bd226c1CE66D255e9", "role": "intermediate_to_tornado"},
+      {"address": "0x3Cffd56B47B7b41c56258D9C7731ABaDc360E073", "role": "intermediate_to_tornado"},
+      {"address": "0xA0e1c89Ef1a489c9C7dE96311eD5Ce5D32c20E4B", "role": "intermediate_to_tornado"}
+    ],
+    "intermediaries_to_cex": [
+      {"address": "0x776B80E3FD97516ae3a2579CF4eAE5fF5867D0F3", "role": "intermediate_to_cex"},
+      {"address": "0x9FaE13DE16d34873246e48b514Fc88581751533F", "role": "intermediate_to_cex"},
+      {"address": "0xDb3A63562Bb7afD44E6b6Be8C8269F807c39F5fa", "role": "intermediate_to_cex"},
+      {"address": "0x5D84A732B355aDa31a36b33C446E3DEe28F51555", "role": "intermediate_to_cex"},
+      {"address": "0x29FC9b71492EC63696cf9CD56e9832a42b0DcEd0", "role": "intermediate_to_cex"},
+      {"address": "0x4fe666eCC5263F5dbB34adB8bc1C8cbB9bbcD1Cc", "role": "intermediate_to_cex"},
+      {"address": "0x7E3167771bf23ac10930803589D1424903B36584", "role": "intermediate_to_cex"}
+    ],
+    "destinations_cex": [
+      {"address": "0x17A96cd2afF8BeCE22b54a83955FbAB5C92A98ca", "role": "cex_deposit", "exchange": "Huobi", "notes": "~71,000 ETH (~$213M) zdeponowane wg raportow Chainalysis"},
+      {"address": "0xbc771FB7B6A8876D09FD2e3E2F17fBC91896d8c8", "role": "cex_deposit", "exchange": "Huobi"},
+      {"address": "0x6102F081de19EB53404B684b4e14667745A4C874", "role": "cex_deposit", "exchange": "Huobi"},
+      {"address": "0xf49Fa9956cD53C4581a974A7Fd535A15c47b954A", "role": "cex_deposit", "exchange": "Huobi"},
+      {"address": "0x5b5082214d62585d686850Ab8d9e3F6B6a5C58fF", "role": "cex_deposit", "exchange": "Huobi"},
+      {"address": "0xa9BFdC186C6Bcf058FbB5Bf62046d7Bc74e96CE2", "role": "cex_deposit", "exchange": "Huobi"},
+      {"address": "0x036587E77eABE6a7E181886A5a6ed10dC25654f9", "role": "cex_deposit", "exchange": "FTX", "notes": "FTX upadl listopad 2022 - moze utrudniac forensics"},
+      {"address": "0x82906886796D110b7eC4c54F6611FB29128699Dd", "role": "cex_deposit", "exchange": "Crypto.com"}
+    ]
+  },
+  "expected_heuristic_hits": {
+    "tornado_cash": {
+      "expected": true,
+      "estimated_volume_usd": 80000000,
+      "notes": "Elliptic szacuje ze ~$80M wypranych przez Tornado Cash zanim OFAC sankcjonowal kontrakty 2022-08-08. Chainalysis szacuje $455M przez Tornado dla wszystkich Lazarus-related funds."
+    },
+    "cex": {
+      "expected": true,
+      "exchanges": ["Huobi", "FTX", "Crypto.com"],
+      "notes": "Glowne destynacje exit liquidity przed Tornado mixing."
+    },
+    "bridges": {
+      "expected": true,
+      "notes": "Po sankcjach Tornado, Lazarus przeszedl na cross-chain bridges (RenBTC -> Bitcoin -> ponowne mieszanie)."
+    },
+    "peel_chain": {
+      "expected": false,
+      "notes": "Lazarus uzyl raczej masowego splitu (12,000+ adresow) niz klasycznego peel chain."
+    }
+  },
+  "ground_truth_metrics": {
+    "total_attacker_root_addresses": 1,
+    "total_intermediary_addresses": 14,
+    "total_cex_deposit_addresses": 8,
+    "estimated_tornado_volume_usd": 80000000,
+    "recovered_usd": 30000000,
+    "notes": "Liczby do liczenia recall - jak wiele z tych adresow nasz BFS znajdzie i jak wiele heurystyk poprawnie trafi."
+  }
+}

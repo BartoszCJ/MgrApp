@@ -1,0 +1,96 @@
+{
+  "case": "Euler Finance",
+  "date": "2023-03-13",
+  "attack_block": 16817996,
+  "attribution": "Pojedynczy exploiter (whitehat-style negocjacje), tozsamosc niepubliczna",
+  "stolen_value_usd": 197000000,
+  "stolen_assets": [
+    {"asset": "DAI", "amount": 8877507},
+    {"asset": "WBTC", "amount": 849},
+    {"asset": "stETH", "amount": 35980},
+    {"asset": "USDC", "amount": 33850000}
+  ],
+  "summary": "Flash loan attack na DeFi lending protocol. Atakujacy uzyl pozyczonych funduszy do manipulacji mechanizmem donate i liquidate, kradnac $197M. Initial gas funding pochodzilo z Tornado Cash. Po hacku exploiter wyslal czesc srodkow przez Tornado, ale po negocjacjach (i grozbie sledztwa) ZWROCIL praktycznie wszystkie odzyskiwalne srodki ($177M+) w transzach miedzy 18 marca a 4 kwietnia 2023. Ciekawy case dla pracy: pokazuje ze automatyczne sledzenie + presja publiczna moga zmusic atakujacego do zwrotu.",
+  "sources": [
+    "https://www.chainalysis.com/blog/euler-finance-flash-loan-attack/",
+    "https://medium.com/@aleno.ai/inside-the-euler-finance-attack-tracing-the-path-of-the-hackers-298f9ed45a12",
+    "https://www.theblock.co/post/224705/euler-hacker-returns-funds",
+    "https://www.euler.finance/blog/war-peace-behind-the-scenes-of-eulers-240m-exploit-recovery"
+  ],
+  "addresses": {
+    "attacker_root": [
+      {
+        "address": "0xb2698c2D99aD2c302a95a8DB26B08D17a77cEDd4",
+        "role": "primary_attacker",
+        "label": "Euler Finance Exploiter 1",
+        "notes": "Glowny EOA atakujacego, otrzymal skradzione fundusze z exploit contractu"
+      },
+      {
+        "address": "0x5F259D0b76665c337c6104145894F4D1D2758B8C",
+        "role": "primary_attacker",
+        "label": "Euler Finance Exploiter 3",
+        "notes": "Drugi adres atakujacego uzywany do dalszego ruchu funduszy"
+      }
+    ],
+    "exploit_contracts": [
+      {
+        "address": "0xeBC29199C817Dc47BA12E3F86102564D640CBf99",
+        "role": "exploit_contract",
+        "notes": "Smart contract uzyty do wykonania flash loan + donate + liquidate"
+      }
+    ],
+    "intermediaries": [
+      {
+        "address": "0x158aE35B3bd3a9CC77d266995E320402A5b73a8c",
+        "role": "intermediary_cross_chain",
+        "notes": "BSC buffer address, wyciagal srodki z Tornado Cash na innym chainie"
+      },
+      {
+        "address": "0x116CeFdA507b6e7BE67BAa27b31B5f5cEABEA154",
+        "role": "suspicious_link",
+        "notes": "Adres z podejrzanym pattern matchujacy Tornado deposits cross-chain - prime suspect wg Aleno.ai"
+      }
+    ],
+    "destinations_tornado": [
+      {
+        "address": "0xA160cdAB225685dA1d56aa342Ad8841c3b53f291",
+        "role": "tornado_pool",
+        "notes": "Tornado Cash 100 ETH pool - exploiter wyslal tu ~1,000 ETH (~$1.65M) w 3 transzach"
+      }
+    ],
+    "return_transactions": [
+      {
+        "address": "0xb2698c2D99aD2c302a95a8DB26B08D17a77cEDd4",
+        "role": "fund_returner",
+        "notes": "Po negocjacjach exploiter zwrocil 51,000 ETH + 7,737 ETH + 3,000 ETH + reszte w wielu transakcjach do Euler treasury"
+      }
+    ]
+  },
+  "expected_heuristic_hits": {
+    "tornado_cash": {
+      "expected": true,
+      "estimated_volume_usd": 1650000,
+      "notes": "Tylko ~1,000 ETH wyslane przez Tornado przed zwrotem. Initial gas funding tez z Tornado."
+    },
+    "cex": {
+      "expected": false,
+      "notes": "Exploiter NIE wyslal srodkow na CEX (uniknal exit liquidity). Po negocjacjach zwrocil wszystko - good case study na 'failed laundering'."
+    },
+    "bridges": {
+      "expected": true,
+      "notes": "BSC buffer address sugeruje cross-chain bridge usage przed atakiem (funding)."
+    },
+    "peel_chain": {
+      "expected": false,
+      "notes": "Brak klasycznego peel chain - exploiter trzymal srodki w paru duzych adresach."
+    }
+  },
+  "ground_truth_metrics": {
+    "total_attacker_root_addresses": 2,
+    "total_intermediary_addresses": 2,
+    "total_exploit_contracts": 1,
+    "estimated_tornado_volume_usd": 1650000,
+    "returned_usd": 177000000,
+    "notes": "Case 'low laundering' - dobrze pokazuje ze brak alertow CEX/peel chain to oczekiwany rezultat. Heurystyki powinny zwrocic mniej alertow niz dla Ronina."
+  }
+}

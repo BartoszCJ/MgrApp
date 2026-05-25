@@ -63,6 +63,23 @@ class TraceRequest(BaseModel):
         le=50,
         description="Max tx pobranych per node dla hop >= 1 (mniejsze, zeby nie zalac API)",
     )
+    start_block: int | None = Field(
+        default=None,
+        ge=0,
+        description="Okno incydentu: dolny blok (None = od poczatku lancucha).",
+    )
+    end_block: int | None = Field(
+        default=None,
+        ge=0,
+        description="Okno incydentu: gorny blok (None = do najnowszego).",
+    )
+    case_name: str | None = Field(
+        default=None,
+        description=(
+            "Nazwa case study do ewaluacji metryk (np. 'ronin', 'euler', 'nomad'). "
+            "Musi istniec plik data/ground_truth/<case_name>.json. None = bez metryk."
+        ),
+    )
 
 
 class Alert(BaseModel):
@@ -121,6 +138,74 @@ class TraceGraph(BaseModel):
     )
 
 
+class MetricsReport(BaseModel):
+    """Raport metryk efektywnosci dla pojedynczego trace vs ground truth.
+
+    Wszystkie procenty w skali 0.0-1.0. Pole `breakdown` zawiera surowe liczby
+    (znalezione/oczekiwane) zeby UI mogl pokazac "12/15 adresow".
+
+    Mapowanie heurystyk -> typy alertow:
+      - tornado_cash -> tornado_cash_deposit, tornado_cash_withdraw
+      - cex -> cex_outgoing, cex_incoming
+      - bridges -> bridge_outgoing, bridge_incoming
+      - peel_chain -> peel_chain
+    """
+
+    case_name: str = Field(description="Nazwa case study, np. 'ronin'")
+
+    address_recall: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Ile znanych adresow z ground truth znalazl BFS, w przedziale 0-1. "
+            "Liczone jako |found ∩ expected| / |expected|."
+        ),
+    )
+    heuristic_precision: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Ile typow heurystyk ktore zgłosily trafienie mialo do tego prawo wg ground truth."
+            " 1.0 = brak fałszywych alarmow. Liczone na poziomie kategorii"
+            " (tornado/cex/bridge/peel)."
+        ),
+    )
+    heuristic_recall: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Ile oczekiwanych heurystyk (expected=True w ground truth) zostalo trafionych. "
+            "Liczone na poziomie kategorii."
+        ),
+    )
+    cex_coverage: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Procent oczekiwanych gield (z ground_truth.expected_heuristic_hits.cex.exchanges) "
+            "ktore pojawily sie w alertach. 1.0 jesli wszystkie znalezione."
+        ),
+    )
+
+    latency_seconds: float = Field(
+        ge=0.0,
+        description="Czas wykonania calego trace endpoint (BFS + Arkham + heurystyki + metryki).",
+    )
+
+    breakdown: dict = Field(
+        default_factory=dict,
+        description=(
+            "Surowe liczby: addresses_found, addresses_expected, heuristics_hit, "
+            "heuristics_expected, cex_exchanges_found, cex_exchanges_expected itp."
+        ),
+    )
+
+    notes: list[str] = Field(
+        default_factory=list,
+        description="Uwagi: nieoczekiwane alerty, brak danych, hint na false positive.",
+    )
+
+
 class TraceResult(BaseModel):
     """Wynik sledzenia: graf transakcji + etykiety + alerty z heurystyk."""
 
@@ -128,6 +213,13 @@ class TraceResult(BaseModel):
     transactions: list[Transaction]
     labels: list[AddressLabel] = Field(default_factory=list)
     alerts: list[Alert] = Field(default_factory=list)
-    graph: TraceGraph | None = Field(default=None, description="Graf BFS przeplywu (jesli hops > 1)")
+    graph: TraceGraph | None = Field(
+        default=None,
+        description="Graf BFS przeplywu (jesli hops > 1)",
+    )
     total_transactions: int = 0
     notes: list[str] = Field(default_factory=list)
+    metrics: MetricsReport | None = Field(
+        default=None,
+        description="Metryki efektywnosci jesli case_name byl podany w requescie.",
+    )

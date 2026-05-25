@@ -29,6 +29,7 @@ next-env.d.ts
 .idea/
 *.swp
 *.swo
+.claude/
 
 # OS
 .DS_Store
