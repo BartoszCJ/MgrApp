@@ -619,8 +619,58 @@ function LabelsTab({ result }: { result: TraceResult }) {
 
   if (result.labels.length === 0) {
     return (
-      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-8 text-center text-neutral-400">
-        Brak etykiet z Arkham dla tego trace.
+      <div className="space-y-4">
+        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-6 text-sm text-amber-100">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded bg-amber-700 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-50">
+              Arkham off
+            </span>
+            <span className="font-medium">Brak etykiet z Arkham Intelligence</span>
+          </div>
+          <p className="mb-2 text-amber-200">
+            Free tier Arkham API zostal wyczerpany. Endpoint nie zwraca etykiet
+            adresow (nazwy typu &quot;Binance Hot Wallet 7&quot;).
+          </p>
+          <p className="text-xs text-amber-300/80">
+            W pracy mgr to realistyczne ograniczenie: komercyjne narzedzia
+            forensics (Chainalysis, Elliptic) korzystaja z platnych warstw
+            atrybucji. Prototyp dziala niezaleznie od Arkhama dzieki lokalnym
+            heurystykom.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-xs text-neutral-400">
+          <p className="mb-2 font-medium text-neutral-300">Co wciaz dziala:</p>
+          <ul className="space-y-1">
+            <li>
+              <span className="text-green-400">✓</span> Heurystyki (Tornado /
+              Bridges / CEX / Peel Chain) - chodza po lokalnych listach
+              <span className="font-mono text-neutral-500">
+                {" "}
+                data/known_addresses/*.json
+              </span>
+              .
+            </li>
+            <li>
+              <span className="text-green-400">✓</span> Graf BFS przez Etherscan
+              (etykiety adresow nie sa potrzebne do sledzenia przeplywu).
+            </li>
+            <li>
+              <span className="text-green-400">✓</span> Ground truth + metryki -
+              porownanie z publicznie udokumentowanymi adresami z
+              <span className="font-mono text-neutral-500">
+                {" "}
+                data/ground_truth/*.json
+              </span>
+              .
+            </li>
+            <li>
+              <span className="text-amber-400">~</span> Address Recall lekko
+              nizszy bo Arkham nie dorzuca dodatkowych adresow do grafu (ale BFS
+              i tak je znajduje).
+            </li>
+          </ul>
+        </div>
       </div>
     );
   }
@@ -870,6 +920,11 @@ function MetricsTab({ result }: { result: TraceResult }) {
             <strong>Heuristic Precision</strong> 100% gdy zaden falszywy alarm. Patrz
             uwagi nizej dla przykladow false positives (np. CEX dla Eulera).
           </li>
+          <li>
+            Gdy <strong>Arkham off</strong> (badge w headerze) - Address Recall moze
+            byc lekko nizszy, bo etykiety nie dorzucaja dodatkowych adresow do
+            zbioru znalezionych. Heurystyki i ground truth dzialaja niezaleznie.
+          </li>
         </ul>
       </div>
     </div>
@@ -953,6 +1008,14 @@ export default function HomePage() {
     metrics: result?.metrics ? 1 : null,
   };
 
+  // Arkham off: heurystyka prosta - po trace nie ma etykiet ani note o sukcesie.
+  // notes zawiera "Arkham" tylko gdy bylo ERROR/empty (handler dodaje notki o bledach).
+  const arkhamOff =
+    result !== null &&
+    result.labels.length === 0 &&
+    (result.notes.some((n) => n.toLowerCase().includes("arkham")) ||
+      result.transactions.length > 0);
+
   return (
     <div className="min-h-screen">
       {/* ===== STICKY HEADER ===== */}
@@ -1026,7 +1089,17 @@ export default function HomePage() {
           </div>
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
-            {currentPreset && <span>{currentPreset.description}</span>}
+            <div className="flex flex-wrap items-center gap-2">
+              {currentPreset && <span>{currentPreset.description}</span>}
+              {arkhamOff && (
+                <span
+                  className="rounded border border-amber-800 bg-amber-950/60 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-300"
+                  title="Arkham API nieaktywne (free tier wyczerpany). Heurystyki + ground truth dzialaja niezaleznie."
+                >
+                  Arkham off
+                </span>
+              )}
+            </div>
             <span>
               {hops === 1 && "1 hop ≈ 5 sek"}
               {hops === 2 && "2 hops ≈ 10-30 sek"}
