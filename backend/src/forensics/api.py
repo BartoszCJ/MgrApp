@@ -31,10 +31,19 @@ async def lifespan(app: FastAPI):
     logger.info("Forensics API starting (v{})", __version__)
     app.state.etherscan = EtherscanClient()
     app.state.arkham = ArkhamClient()
+    await _run_startup_api_checks(app)
     yield
     await app.state.etherscan.close()
     await app.state.arkham.close()
     logger.info("Forensics API stopped")
+
+
+async def _run_startup_api_checks(app: FastAPI) -> None:
+    """Wypisz w konsoli szybkie sprawdzenie zewnetrznych API."""
+    logger.info("API check | Start")
+    await app.state.etherscan.check_connection()
+    await app.state.arkham.check_connection()
+    logger.info("API check | Koniec")
 
 
 app = FastAPI(

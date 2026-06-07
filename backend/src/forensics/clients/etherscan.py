@@ -53,6 +53,66 @@ class EtherscanClient:
     async def close(self) -> None:
         await self.client.aclose()
 
+    async def check_connection(self) -> bool:
+        """Lekki startup check: czy Etherscan odpowiada i czy klucz wyglada poprawnie."""
+        params: dict[str, QueryParamValue] = {
+            "chainid": self.chain_id,
+            "module": "account",
+            "action": "balance",
+            "address": "0xde0b295669a9fd93d5f28d9ec85e40f4cb697bae",
+            "tag": "latest",
+            "apikey": self.api_key,
+        }
+
+        logger.opt(colors=True).info(
+            "API check | Etherscan | <cyan>Call do API</cyan>: account.balance"
+        )
+        try:
+            response = await self.client.get(ETHERSCAN_BASE_URL, params=params)
+        except httpx.RequestError as exc:
+            logger.opt(colors=True).warning(
+                "API check | Etherscan | <red>Blad requestu</red>: {}", exc
+            )
+            return False
+
+        if response.status_code < 400:
+            logger.opt(colors=True).info(
+                "API check | Etherscan | <cyan>Odpowiedz HTTP</cyan>: <green>{} {}</green>",
+                response.status_code,
+                response.reason_phrase,
+            )
+        else:
+            logger.opt(colors=True).info(
+                "API check | Etherscan | <cyan>Odpowiedz HTTP</cyan>: <red>{} {}</red>",
+                response.status_code,
+                response.reason_phrase,
+            )
+        if response.status_code >= 400:
+            logger.opt(colors=True).warning(
+                "API check | Etherscan | <red>API nie jest OK</red>: {}",
+                response.text[:200],
+            )
+            return False
+
+        try:
+            data = response.json()
+        except ValueError:
+            logger.opt(colors=True).warning(
+                "API check | Etherscan | <red>API nie jest OK</red>: response to nie JSON"
+            )
+            return False
+
+        if data.get("status") == "1":
+            logger.opt(colors=True).info("API check | Etherscan | <green>API jest OK</green>")
+            return True
+
+        message = data.get("message", "UNKNOWN")
+        result = data.get("result", "")
+        logger.opt(colors=True).warning(
+            "API check | Etherscan | <red>API nie jest OK</red>: {} ({})", message, result
+        )
+        return False
+
     async def get_normal_transactions(
         self,
         address: str,

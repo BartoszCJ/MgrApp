@@ -54,6 +54,59 @@ class ArkhamClient:
     async def close(self) -> None:
         await self.client.aclose()
 
+    async def check_connection(self) -> bool:
+        """Lekki startup check: czy Arkham odpowiada i czy klucz jest przyjety."""
+        if not self.api_key:
+            logger.opt(colors=True).warning(
+                "API check | Arkham | <red>Pominieto</red>: brak ARKHAM_API_KEY"
+            )
+            return False
+
+        address = "0x098b716b8aaf21512996dc57eb0615e2383e2f96"
+        url = f"{ARKHAM_BASE_URL}/intelligence/address/{address}/all"
+
+        logger.opt(colors=True).info(
+            "API check | Arkham | <cyan>Call do API</cyan>: address intelligence"
+        )
+        try:
+            response = await self.client.get(url)
+        except httpx.RequestError as exc:
+            logger.opt(colors=True).warning(
+                "API check | Arkham | <red>Blad requestu</red>: {}", exc
+            )
+            return False
+
+        if response.status_code == 200:
+            logger.opt(colors=True).info(
+                "API check | Arkham | <cyan>Odpowiedz HTTP</cyan>: <green>{} {}</green>",
+                response.status_code,
+                response.reason_phrase,
+            )
+        else:
+            logger.opt(colors=True).info(
+                "API check | Arkham | <cyan>Odpowiedz HTTP</cyan>: <red>{} {}</red>",
+                response.status_code,
+                response.reason_phrase,
+            )
+        if response.status_code == 200:
+            logger.opt(colors=True).info("API check | Arkham | <green>API jest OK</green>")
+            return True
+        if response.status_code == 401:
+            logger.opt(colors=True).warning(
+                "API check | Arkham | <red>API nie jest OK</red>: 401 Unauthorized"
+            )
+            return False
+        if response.status_code == 429:
+            logger.opt(colors=True).warning(
+                "API check | Arkham | <red>API osiagalne, ale rate limit 429</red>"
+            )
+            return False
+
+        logger.opt(colors=True).warning(
+            "API check | Arkham | <red>API nie jest OK</red>: {}", response.text[:200]
+        )
+        return False
+
     async def get_address_intelligence(self, address: str) -> AddressLabel | None:
         """Pyta Arkham o pojedynczy adres.
 
