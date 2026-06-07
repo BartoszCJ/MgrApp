@@ -34,6 +34,14 @@ export type TraceRequest = {
   start_block?: number | null;
   end_block?: number | null;
   case_name?: string | null;
+  refresh?: boolean; // pomin cache i pobierz na zywo
+};
+
+export type ProviderCache = { hit: number; miss: number };
+
+export type CacheInfo = {
+  mode?: string; // 'normal' | 'refresh'
+  providers?: Record<string, ProviderCache>;
 };
 
 export type MetricsReport = {
@@ -102,4 +110,42 @@ export type TraceResult = {
   total_transactions: number;
   notes: string[];
   metrics: MetricsReport | null;
+  cache: CacheInfo;
+};
+
+// ---- Cache zarzadzanie + zapis eksperymentu ----
+
+export type CacheStatus = {
+  cache_version: number;
+  dir: string;
+  total_files: number;
+  total_bytes: number;
+  providers: Record<string, number>;
+};
+
+export type ExperimentCasePayload = {
+  case: string;
+  address: string;
+  hops: number;
+  start_block: number | null;
+  end_block: number | null;
+  nodes: number;
+  edges: number;
+  alerts: number;
+  labels: number;
+  metrics: MetricsReport | null;
+  cache: CacheInfo;
+  error: string | null;
+};
+
+export type ExperimentSavePayload = {
+  cache_mode: string;
+  cases: ExperimentCasePayload[];
+};
+
+export type ExperimentSaveResult = {
+  timestamp: string;
+  commit_hash: string | null;
+  files: string[];
+  saved_dir: string;
 };

@@ -22,6 +22,7 @@ from typing import TypeAlias
 import httpx
 from loguru import logger
 
+from forensics import cache
 from forensics.config import settings
 from forensics.core.models import Transaction
 
@@ -113,6 +114,27 @@ class EtherscanClient:
         )
         return False
 
+    async def _cached_get(self, action: str, params: dict[str, QueryParamValue]) -> dict:
+        """GET z dyskowym cache.
+
+        Cache'uje TYLKO definitywne odpowiedzi (HTTP 200 i status='1' albo
+        'No transactions found'). Bledy/transienty nie sa cache'owane.
+        Klucz cache nie zawiera apikey - cache.read/write sanityzuja params.
+        """
+        env = cache.read("etherscan", action, dict(params))
+        if env is not None:
+            return env["payload"]
+
+        response = await self.client.get(ETHERSCAN_BASE_URL, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        status_ok = data.get("status") == "1"
+        no_tx = "No transactions found" in str(data.get("message", ""))
+        if status_ok or no_tx:
+            cache.write("etherscan", action, dict(params), data, response.status_code)
+        return data
+
     async def get_normal_transactions(
         self,
         address: str,
@@ -150,9 +172,7 @@ class EtherscanClient:
             page,
             offset,
         )
-        response = await self.client.get(ETHERSCAN_BASE_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
+        data = await self._cached_get("txlist", params)
 
         # Etherscan: status="1" = OK, status="0" = blad lub pusta lista
         if data.get("status") != "1":
@@ -199,9 +219,7 @@ class EtherscanClient:
             page,
             offset,
         )
-        response = await self.client.get(ETHERSCAN_BASE_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
+        data = await self._cached_get("tokentx", params)
 
         if data.get("status") != "1":
             message = data.get("message", "")

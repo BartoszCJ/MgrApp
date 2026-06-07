@@ -80,6 +80,13 @@ class TraceRequest(BaseModel):
             "Musi istniec plik data/ground_truth/<case_name>.json. None = bez metryk."
         ),
     )
+    refresh: bool = Field(
+        default=False,
+        description=(
+            "Pomin dyskowy cache i pobierz na zywo z API (nadpisuje cache). "
+            "Do pokazania, ze API faktycznie dziala."
+        ),
+    )
 
 
 class Alert(BaseModel):
@@ -223,3 +230,48 @@ class TraceResult(BaseModel):
         default=None,
         description="Metryki efektywnosci jesli case_name byl podany w requescie.",
     )
+    cache: dict = Field(
+        default_factory=dict,
+        description=(
+            "Staty cache dla tego requestu: {'mode': 'normal'|'refresh', "
+            "'providers': {'etherscan': {'hit': N, 'miss': M}, ...}}."
+        ),
+    )
+
+
+# ============================================================================
+# Eksperyment: zapis wynikow 3 case'ow z metadanymi
+# ============================================================================
+
+
+class ExperimentCaseResult(BaseModel):
+    """Wynik pojedynczego case'a w eksperymencie - to co frontend zebral z trace."""
+
+    case: str = Field(description="Klucz case study, np. 'ronin'")
+    address: str
+    hops: int
+    start_block: int | None = None
+    end_block: int | None = None
+    nodes: int = 0
+    edges: int = 0
+    alerts: int = 0
+    labels: int = 0
+    metrics: MetricsReport | None = None
+    cache: dict = Field(default_factory=dict, description="Staty cache z trace tego case'a.")
+    error: str | None = None
+
+
+class ExperimentSaveRequest(BaseModel):
+    """Wejscie do POST /api/experiments - bundel 3 case'ow + tryb cache."""
+
+    cache_mode: str = Field(default="normal", description="normal | refresh")
+    cases: list[ExperimentCaseResult] = Field(default_factory=list)
+
+
+class ExperimentSaveResult(BaseModel):
+    """Odpowiedz po zapisie eksperymentu na dysk (results/experiments/)."""
+
+    timestamp: str
+    commit_hash: str | None = None
+    files: list[str] = Field(default_factory=list)
+    saved_dir: str

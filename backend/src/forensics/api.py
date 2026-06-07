@@ -13,12 +13,18 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from forensics import __version__
+from forensics import __version__, cache
 from forensics.clients.arkham import ArkhamClient, ArkhamError
 from forensics.clients.etherscan import EtherscanClient, EtherscanError
 from forensics.config import settings
 from forensics.core.graph import build_trace_graph
-from forensics.core.models import TraceRequest, TraceResult
+from forensics.core.models import (
+    ExperimentSaveRequest,
+    ExperimentSaveResult,
+    TraceRequest,
+    TraceResult,
+)
+from forensics.experiments import write_experiment
 from forensics.heuristics.known_address import detect_known_group
 from forensics.heuristics.peel_chain import detect_peel_chain
 from forensics.heuristics.tornado import detect_tornado
@@ -83,6 +89,7 @@ async def trace(request: TraceRequest) -> TraceResult:
     """
     address = request.address.lower()
     started_at = time.perf_counter()
+    cache.begin_request(request.refresh)  # reset stat hit/miss + tryb refresh
 
     try:
         all_txs, graph = await build_trace_graph(
@@ -145,6 +152,18 @@ async def trace(request: TraceRequest) -> TraceResult:
         f"Heurystyki: {len(alerts)} alertow.{window_note}"
     )
 
+    # Staty cache za ten request (per provider) - widoczne w notes i polu cache.
+    cache_stats = cache.current_stats()
+    cache_mode = "refresh" if request.refresh else "normal"
+    if cache_stats:
+        summary = "; ".join(
+            f"{prov} {b['hit']} hit / {b['miss']} miss"
+            for prov, b in sorted(cache_stats.items())
+        )
+        notes.append(f"Cache [{cache_mode}]: {summary}")
+    else:
+        notes.append(f"Cache [{cache_mode}]: brak zapytan do API")
+
     result = TraceResult(
         root_address=address,
         transactions=root_txs,
@@ -153,6 +172,7 @@ async def trace(request: TraceRequest) -> TraceResult:
         graph=graph,
         total_transactions=len(root_txs),
         notes=notes,
+        cache={"mode": cache_mode, "providers": cache_stats},
     )
 
     if request.case_name:
@@ -166,3 +186,22 @@ async def trace(request: TraceRequest) -> TraceResult:
             notes.append(f"Metryki failed: {exc}")
 
     return result
+
+
+@app.get("/api/cache/status")
+async def cache_status() -> dict:
+    """Statystyki dyskowego cache: liczba plikow per provider, rozmiar, wersja."""
+    return cache.status()
+
+
+@app.delete("/api/cache")
+async def cache_clear() -> dict:
+    """Czysci dyskowy cache (backend/.cache/). NIE rusza results/ ani innych danych."""
+    deleted = cache.clear()
+    return {"deleted": deleted}
+
+
+@app.post("/api/experiments", response_model=ExperimentSaveResult)
+async def save_experiment(request: ExperimentSaveRequest) -> ExperimentSaveResult:
+    """Zapisuje wynik eksperymentu (3 case'y) do results/experiments/ (json+md+csv)."""
+    return write_experiment(request)

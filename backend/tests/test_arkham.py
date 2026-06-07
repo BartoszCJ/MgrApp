@@ -1,16 +1,25 @@
-"""Testy cache'a klienta Arkham.
+"""Testy cache'a klienta Arkham (oparty o dyskowy forensics.cache).
 
-Cache ma chronic free tier: ten sam adres pytany jest tylko raz na sesje.
+Cache ma chronic free tier: ten sam adres pytany jest tylko raz.
 Sprawdzamy to liczac realne zapytania HTTP przez httpx.MockTransport.
+
+Izolacja: kazdy test ma wlasny katalog cache (FORENSICS_CACHE_DIR -> tmp_path).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import httpx
+import pytest
 
 from forensics.clients.arkham import ArkhamClient
+
+
+@pytest.fixture(autouse=True)
+def _isolated_cache_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FORENSICS_CACHE_DIR", str(tmp_path))
 
 
 async def _make_client(handler: Callable[[httpx.Request], httpx.Response]) -> ArkhamClient:

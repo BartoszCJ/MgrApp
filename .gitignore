@@ -40,5 +40,15 @@ dist/
 build/
 
 # Output / results
-results/
+# Ignorujemy zawartosc results/, ale wyniki eksperymentow (md/csv/json) commitujemy
+# jako dowody do pracy. Wzorzec whitelist: najpierw ignore, potem wyjatki.
+results/*
+!results/experiments/
+results/experiments/*
+!results/experiments/*.md
+!results/experiments/*.csv
+!results/experiments/*.json
 *.log
+
+# Cache surowych odpowiedzi API (regenerowalny, lokalny - nigdy nie commitujemy)
+.cache/

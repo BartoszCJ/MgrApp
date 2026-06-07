@@ -1,9 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { trace, ApiError } from "@/lib/api";
+import { trace, ApiError, saveExperiment, clearCache } from "@/lib/api";
 import { formatBlockNumber } from "@/lib/format";
-import type { AddressLabel, Alert, MetricsReport, TraceResult } from "@/lib/types";
+import type {
+  AddressLabel,
+  Alert,
+  CacheInfo,
+  ExperimentSaveResult,
+  MetricsReport,
+  TraceResult,
+} from "@/lib/types";
 import { TraceGraphView, type GraphFilter } from "@/components/TraceGraphView";
 
 // ============================================================================
@@ -932,6 +939,259 @@ function MetricsTab({ result }: { result: TraceResult }) {
 }
 
 // ============================================================================
+// Eksperyment: 3 case'y naraz -> tabela porownawcza
+// ============================================================================
+
+type ExperimentRow = {
+  key: string;
+  label: string;
+  address: string;
+  startBlock: number | null;
+  endBlock: number | null;
+  hops: number;
+  metrics: MetricsReport | null;
+  nodes: number;
+  edges: number;
+  alerts: number;
+  labels: number;
+  cache: CacheInfo;
+  error: string | null;
+};
+
+function pct(v: number): string {
+  return `${Math.round(v * 100)}%`;
+}
+
+function buildExperimentMarkdown(rows: ExperimentRow[], hopsUsed: number): string {
+  const head =
+    "| Case | Address Recall | Heur. Precision | Heur. Recall | CEX Coverage | Węzły | Alerty | Latency [s] |";
+  const sep = "|---|---|---|---|---|---|---|---|";
+  const body = rows.map((r) =>
+    r.metrics
+      ? `| ${r.label} | ${pct(r.metrics.address_recall)} | ${pct(r.metrics.heuristic_precision)} | ` +
+        `${pct(r.metrics.heuristic_recall)} | ${pct(r.metrics.cex_coverage)} | ${r.nodes} | ` +
+        `${r.alerts} | ${r.metrics.latency_seconds.toFixed(2)} |`
+      : `| ${r.label} | — | — | — | — | — | — | ${r.error ?? "błąd"} |`,
+  );
+  const stamp = `<!-- hops=${hopsUsed}, okno incydentu ON, wygenerowano ${new Date()
+    .toISOString()
+    .slice(0, 10)} -->`;
+  return [stamp, head, sep, ...body].join("\n");
+}
+
+function buildExperimentCsv(rows: ExperimentRow[]): string {
+  const head =
+    "case,address_recall,heuristic_precision,heuristic_recall,cex_coverage,nodes,alerts,latency_s";
+  const body = rows.map((r) =>
+    r.metrics
+      ? [
+          r.label,
+          r.metrics.address_recall,
+          r.metrics.heuristic_precision,
+          r.metrics.heuristic_recall,
+          r.metrics.cex_coverage,
+          r.nodes,
+          r.alerts,
+          r.metrics.latency_seconds,
+        ].join(",")
+      : [r.label, "", "", "", "", "", "", r.error ?? "error"].join(","),
+  );
+  return [head, ...body].join("\n");
+}
+
+function downloadText(filename: string, content: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ExperimentMetricCell({ value }: { value: number }) {
+  const c = metricColor(value);
+  return (
+    <td className={`px-3 py-2 text-right font-mono font-semibold ${c.text}`}>{pct(value)}</td>
+  );
+}
+
+function ExperimentPanel({
+  rows,
+  running,
+  progress,
+  hopsUsed,
+  saveResult,
+  saveError,
+}: {
+  rows: ExperimentRow[];
+  running: boolean;
+  progress: string | null;
+  hopsUsed: number;
+  saveResult: ExperimentSaveResult | null;
+  saveError: string | null;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  // Srednia liczona tylko z wierszy ktore maja metryki (bez assertion - czysty TS).
+  const ms: MetricsReport[] = [];
+  for (const r of rows) if (r.metrics) ms.push(r.metrics);
+  const avg =
+    ms.length > 0
+      ? {
+          address_recall: ms.reduce((s, m) => s + m.address_recall, 0) / ms.length,
+          heuristic_precision: ms.reduce((s, m) => s + m.heuristic_precision, 0) / ms.length,
+          heuristic_recall: ms.reduce((s, m) => s + m.heuristic_recall, 0) / ms.length,
+          cex_coverage: ms.reduce((s, m) => s + m.cex_coverage, 0) / ms.length,
+        }
+      : null;
+
+  // Zagregowane staty cache po wszystkich case'ach (ile poszlo z cache).
+  const cacheAgg: Record<string, { hit: number; miss: number }> = {};
+  for (const r of rows) {
+    for (const [prov, b] of Object.entries(r.cache?.providers ?? {})) {
+      const acc = (cacheAgg[prov] ??= { hit: 0, miss: 0 });
+      acc.hit += b.hit;
+      acc.miss += b.miss;
+    }
+  }
+  const cacheLine = Object.entries(cacheAgg)
+    .map(([p, b]) => `${p}: ${b.hit} hit / ${b.miss} miss`)
+    .join(" · ");
+
+  async function copyMarkdown() {
+    await navigator.clipboard.writeText(buildExperimentMarkdown(rows, hopsUsed));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold">Eksperyment — 3 case studies</h2>
+          <p className="text-xs text-neutral-500">
+            Ronin / Euler / Nomad · hops={hopsUsed} · okno incydentu ON · porownanie z ground
+            truth.
+          </p>
+        </div>
+        {!running && ms.length > 0 && (
+          <div className="flex gap-2">
+            <button
+              onClick={copyMarkdown}
+              className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs font-medium text-neutral-200 transition hover:border-blue-500"
+            >
+              {copied ? "Skopiowano ✓" : "Kopiuj Markdown"}
+            </button>
+            <button
+              onClick={() =>
+                downloadText("eksperyment_metryki.csv", buildExperimentCsv(rows), "text/csv")
+              }
+              className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs font-medium text-neutral-200 transition hover:border-blue-500"
+            >
+              Pobierz CSV
+            </button>
+          </div>
+        )}
+      </div>
+
+      {running && (
+        <div className="rounded-md border border-blue-900 bg-blue-950/40 p-3 text-sm text-blue-200">
+          Uruchamiam… {progress ?? ""}{" "}
+          <span className="text-blue-400">
+            (cierpliwosci — to {PRESETS.length} pelne trace, kazdy ~{hopsUsed >= 3 ? "1-5 min" : "10-30 sek"})
+          </span>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-900">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-neutral-800 text-left text-neutral-400">
+              <th className="px-3 py-2 font-medium">Case</th>
+              <th className="px-3 py-2 text-right font-medium">Addr. Recall</th>
+              <th className="px-3 py-2 text-right font-medium">Heur. Prec.</th>
+              <th className="px-3 py-2 text-right font-medium">Heur. Recall</th>
+              <th className="px-3 py-2 text-right font-medium">CEX Cov.</th>
+              <th className="px-3 py-2 text-right font-medium">Węzły</th>
+              <th className="px-3 py-2 text-right font-medium">Alerty</th>
+              <th className="px-3 py-2 text-right font-medium">Latency</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-b border-neutral-900">
+                <td className="px-3 py-2 font-medium text-neutral-200">{r.label}</td>
+                {r.metrics ? (
+                  <>
+                    <ExperimentMetricCell value={r.metrics.address_recall} />
+                    <ExperimentMetricCell value={r.metrics.heuristic_precision} />
+                    <ExperimentMetricCell value={r.metrics.heuristic_recall} />
+                    <ExperimentMetricCell value={r.metrics.cex_coverage} />
+                    <td className="px-3 py-2 text-right font-mono text-neutral-300">{r.nodes}</td>
+                    <td className="px-3 py-2 text-right font-mono text-neutral-300">{r.alerts}</td>
+                    <td className="px-3 py-2 text-right font-mono text-neutral-400">
+                      {r.metrics.latency_seconds.toFixed(1)}s
+                    </td>
+                  </>
+                ) : (
+                  <td colSpan={7} className="px-3 py-2 text-xs text-red-300">
+                    {r.error ?? "błąd"}
+                  </td>
+                )}
+              </tr>
+            ))}
+            {avg && (
+              <tr className="border-t border-neutral-700 bg-neutral-950/60">
+                <td className="px-3 py-2 font-semibold text-neutral-300">Średnia</td>
+                <ExperimentMetricCell value={avg.address_recall} />
+                <ExperimentMetricCell value={avg.heuristic_precision} />
+                <ExperimentMetricCell value={avg.heuristic_recall} />
+                <ExperimentMetricCell value={avg.cex_coverage} />
+                <td className="px-3 py-2 text-right text-neutral-600">—</td>
+                <td className="px-3 py-2 text-right text-neutral-600">—</td>
+                <td className="px-3 py-2 text-right text-neutral-600">—</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {!running && cacheLine && (
+        <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs text-neutral-400">
+          Cache (suma 3 case&apos;ow): {cacheLine}
+        </div>
+      )}
+
+      {saveResult && (
+        <div className="rounded-md border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
+          Zapisano do <span className="font-mono">results/experiments/</span>:{" "}
+          {saveResult.files.join(", ")}
+          {saveResult.commit_hash && (
+            <>
+              {" "}
+              · commit <span className="font-mono">{saveResult.commit_hash}</span>
+            </>
+          )}
+        </div>
+      )}
+      {saveError && (
+        <div className="rounded-md border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+          Zapis wynikow nieudany: {saveError}
+        </div>
+      )}
+
+      <p className="text-xs text-neutral-500">
+        Kolory: <span className="text-green-400">≥70%</span> dobry,{" "}
+        <span className="text-amber-400">40-70%</span> sredni, <span className="text-red-400">&lt;40%</span>{" "}
+        slaby. Tabela gotowa do wklejenia w rozdzial wynikow (Kopiuj Markdown) lub do dalszej
+        obrobki (CSV). Graf kazdego case&apos;a obejrzysz osobno przez Trace + zakladka Graph.
+      </p>
+    </div>
+  );
+}
+
+// ============================================================================
 // Main page
 // ============================================================================
 
@@ -944,6 +1204,20 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+
+  // Tryb eksperymentu: 3 case'y naraz -> tabela. Wzajemnie wyklucza sie z trybem
+  // pojedynczego trace (experiment !== null => pokazujemy panel, nie zakladki).
+  const [experiment, setExperiment] = useState<ExperimentRow[] | null>(null);
+  const [expRunning, setExpRunning] = useState(false);
+  const [expProgress, setExpProgress] = useState<string | null>(null);
+  const [expHops, setExpHops] = useState<number>(2);
+  const [expSaveResult, setExpSaveResult] = useState<ExperimentSaveResult | null>(null);
+  const [expSaveError, setExpSaveError] = useState<string | null>(null);
+
+  // Cache: tryb "na zywo" (pomin cache) + zarzadzanie (wyczysc).
+  const [refresh, setRefresh] = useState(false);
+  const [cacheMsg, setCacheMsg] = useState<string | null>(null);
+  const [clearingCache, setClearingCache] = useState(false);
 
   function applyPreset(key: string) {
     const preset = PRESETS.find((p) => p.key === key);
@@ -959,6 +1233,7 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setExperiment(null); // wyjscie z trybu eksperymentu
 
     const preset = PRESETS.find((p) => p.key === presetKey);
     const incidentWindow =
@@ -976,6 +1251,7 @@ export default function HomePage() {
         max_transactions: 50,
         max_per_hop: 20,
         ...incidentWindow,
+        refresh,
         // case_name: tylko gdy uzytkownik wybral preset (ronin/euler/nomad).
         // Backend ma plik ground_truth/<case_name>.json - bedziemy mieli metryki.
         case_name: preset ? preset.key : null,
@@ -987,6 +1263,112 @@ export default function HomePage() {
       else setError(String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Eksperyment: leci po wszystkich presetach po kolei (sekwencyjnie, zeby nie
+  // zalac Etherscan/Arkham), z aktualnym hops i oknem incydentu ON. Tabela
+  // wypelnia sie progresywnie - kazdy gotowy case od razu pokazuje sie w UI.
+  async function runExperiment() {
+    setExpRunning(true);
+    setExpProgress(null);
+    setError(null);
+    setResult(null);
+    setExpHops(hops);
+    setExpSaveResult(null);
+    setExpSaveError(null);
+    setExperiment([]);
+
+    const rows: ExperimentRow[] = [];
+    for (let i = 0; i < PRESETS.length; i++) {
+      const preset = PRESETS[i];
+      const startBlock = preset.incident.attackBlock;
+      const endBlock = preset.incident.attackBlock + preset.incident.windowSize;
+      setExpProgress(`${preset.label} (${i + 1}/${PRESETS.length})`);
+      try {
+        const data = await trace({
+          address: preset.address,
+          hops,
+          max_transactions: 50,
+          max_per_hop: 20,
+          start_block: startBlock,
+          end_block: endBlock,
+          refresh,
+          case_name: preset.key,
+        });
+        rows.push({
+          key: preset.key,
+          label: preset.label,
+          address: preset.address,
+          startBlock,
+          endBlock,
+          hops,
+          metrics: data.metrics,
+          nodes: data.graph?.nodes.length ?? 0,
+          edges: data.graph?.edges.length ?? 0,
+          alerts: data.alerts.length,
+          labels: data.labels.length,
+          cache: data.cache ?? {},
+          error: data.metrics ? null : "Brak metryk (sprawdz data/ground_truth)",
+        });
+      } catch (e) {
+        rows.push({
+          key: preset.key,
+          label: preset.label,
+          address: preset.address,
+          startBlock,
+          endBlock,
+          hops,
+          metrics: null,
+          nodes: 0,
+          edges: 0,
+          alerts: 0,
+          labels: 0,
+          cache: {},
+          error: e instanceof ApiError ? `API ${e.status}: ${e.message}` : String(e),
+        });
+      }
+      setExperiment([...rows]);
+    }
+
+    setExpProgress(null);
+    setExpRunning(false);
+
+    // Zapis na backend: results/experiments/ (json+md+csv) z metadanymi + commit_hash.
+    try {
+      const saved = await saveExperiment({
+        cache_mode: refresh ? "refresh" : "normal",
+        cases: rows.map((r) => ({
+          case: r.key,
+          address: r.address,
+          hops: r.hops,
+          start_block: r.startBlock,
+          end_block: r.endBlock,
+          nodes: r.nodes,
+          edges: r.edges,
+          alerts: r.alerts,
+          labels: r.labels,
+          metrics: r.metrics,
+          cache: r.cache,
+          error: r.error,
+        })),
+      });
+      setExpSaveResult(saved);
+    } catch (e) {
+      setExpSaveError(e instanceof ApiError ? `API ${e.status}: ${e.message}` : String(e));
+    }
+  }
+
+  async function handleClearCache() {
+    setClearingCache(true);
+    setCacheMsg(null);
+    try {
+      const res = await clearCache();
+      setCacheMsg(`Cache wyczyszczony: usunieto ${res.deleted} plikow.`);
+    } catch (e) {
+      setCacheMsg(e instanceof ApiError ? `Blad: ${e.message}` : String(e));
+    } finally {
+      setClearingCache(false);
     }
   }
 
@@ -1081,11 +1463,44 @@ export default function HomePage() {
 
             <button
               onClick={handleTrace}
-              disabled={loading || !address}
+              disabled={loading || expRunning || !address}
               className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Trace..." : "Trace"}
             </button>
+
+            <button
+              onClick={runExperiment}
+              disabled={loading || expRunning}
+              title="Uruchamia Ronin + Euler + Nomad z aktualnym hops i oknem incydentu, buduje tabele porownawcza metryk do pracy"
+              className="rounded-md border border-emerald-700 bg-emerald-700/20 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-700/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {expRunning ? "Eksperyment…" : "Eksperyment 3×"}
+            </button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+            <label
+              className="flex cursor-pointer items-center gap-2 text-neutral-300"
+              title="Pomija dyskowy cache i pobiera swieze dane z API (nadpisuje cache). Do pokazania, ze API zyje."
+            >
+              <input
+                type="checkbox"
+                checked={refresh}
+                onChange={(e) => setRefresh(e.target.checked)}
+                className="h-3.5 w-3.5 cursor-pointer accent-emerald-600"
+              />
+              <span>Pobierz na żywo (pomiń cache)</span>
+            </label>
+            <button
+              onClick={handleClearCache}
+              disabled={clearingCache}
+              title="Usuwa dyskowy cache (backend/.cache/). Nie rusza zapisanych wynikow eksperymentow."
+              className="rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1 font-medium text-neutral-300 transition hover:border-red-600 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {clearingCache ? "Czyszczę…" : "Wyczyść cache"}
+            </button>
+            {cacheMsg && <span className="text-neutral-400">{cacheMsg}</span>}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
@@ -1179,13 +1594,26 @@ export default function HomePage() {
           </div>
         )}
 
+        {experiment !== null ? (
+          <ExperimentPanel
+            rows={experiment}
+            running={expRunning}
+            progress={expProgress}
+            hopsUsed={expHops}
+            saveResult={expSaveResult}
+            saveError={expSaveError}
+          />
+        ) : (
+          <>
         {!result && !loading && !error && (
           <div className="rounded-lg border border-dashed border-neutral-700 bg-neutral-900 p-12 text-center">
             <div className="mb-3 text-4xl">🔍</div>
             <h3 className="mb-2 text-lg font-semibold">Wybierz case study lub wpisz adres</h3>
             <p className="text-sm text-neutral-400">
               Kliknij jeden z presetow u gory albo wklej dowolny adres Ethereum (0x...) i nacisnij
-              Trace.
+              Trace — albo kliknij{" "}
+              <span className="font-medium text-emerald-300">Eksperyment 3×</span>, zeby od razu
+              policzyc wszystkie 3 case&apos;y i dostac tabele porownawcza.
             </p>
           </div>
         )}
@@ -1214,6 +1642,8 @@ export default function HomePage() {
             )}
             {activeTab === "labels" && <LabelsTab result={result} />}
             {activeTab === "metrics" && <MetricsTab result={result} />}
+          </>
+        )}
           </>
         )}
       </main>

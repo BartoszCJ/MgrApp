@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from forensics import cache
 from forensics.config import settings
 from forensics.core.models import AddressLabel
 
@@ -50,10 +51,6 @@ class ArkhamClient:
             headers={"API-Key": self.api_key} if self.api_key else {},
         )
         self._semaphore = asyncio.Semaphore(concurrency)
-        # Cache w pamieci: adres (lowercase) -> AddressLabel albo None (znany brak).
-        # Zyje tyle co instancja klienta (tworzona raz przy starcie API), wiec ten sam
-        # adres pytany jest tylko raz na sesje - chroni free tier i przyspiesza trace.
-        self._cache: dict[str, AddressLabel | None] = {}
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -122,8 +119,9 @@ class ArkhamClient:
             return None
 
         key = address.lower()
-        if key in self._cache:
-            return self._cache[key]
+        env = cache.read("arkham", "address_intelligence", {"address": key})
+        if env is not None:
+            return self._label_from_cache(address, env)
 
         url = f"{ARKHAM_BASE_URL}/intelligence/address/{address}/all"
 
@@ -135,7 +133,7 @@ class ArkhamClient:
                 return None  # blad sieci jest przejsciowy - nie cache'ujemy
 
         if response.status_code == 404:
-            self._cache[key] = None  # adres na pewno nieznany - cache'ujemy brak
+            cache.write("arkham", "address_intelligence", {"address": key}, None, 404)
             return None
         if response.status_code == 401:
             raise ArkhamError("Arkham 401 Unauthorized - sprawdz ARKHAM_API_KEY w .env")
@@ -153,10 +151,16 @@ class ArkhamClient:
         except ValueError:
             return None
 
-        # Definitywna odpowiedz (etykieta albo znany brak) - cache'ujemy.
-        label = self._parse_address(address, data) if data else None
-        self._cache[key] = label
-        return label
+        # Definitywna odpowiedz - cache'ujemy surowy payload Arkhama.
+        cache.write("arkham", "address_intelligence", {"address": key}, data, response.status_code)
+        return self._parse_address(address, data) if data else None
+
+    def _label_from_cache(self, address: str, env: dict) -> AddressLabel | None:
+        """Odtwarza AddressLabel z koperty cache (raw payload Arkhama)."""
+        if env.get("status_code") == 404:
+            return None
+        payload = env.get("payload")
+        return self._parse_address(address, payload) if payload else None
 
     async def get_many(self, addresses: list[str]) -> dict[str, AddressLabel]:
         """Batch lookup. Zwraca slownik adres -> AddressLabel (tylko dla znanych)."""
@@ -164,13 +168,7 @@ class ArkhamClient:
             return {}
 
         unique = list({addr.lower() for addr in addresses})
-        cached = sum(1 for addr in unique if addr in self._cache)
-        logger.info(
-            "Arkham batch lookup: {} unique ({} z cache, {} do pobrania)",
-            len(unique),
-            cached,
-            len(unique) - cached,
-        )
+        logger.info("Arkham batch lookup: {} unikalnych adresow", len(unique))
 
         tasks = [self.get_address_intelligence(addr) for addr in unique]
         results = await asyncio.gather(*tasks, return_exceptions=True)
