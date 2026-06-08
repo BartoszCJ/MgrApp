@@ -1,0 +1,191 @@
+{
+  "timestamp": "20260607_225513",
+  "commit_hash": "af3f698",
+  "cache_mode": "refresh",
+  "cases": [
+    {
+      "case": "ronin",
+      "address": "0x098B716B8Aaf21512996dC57EB0615e2383E2f96",
+      "hops": 2,
+      "start_block": 14442835,
+      "end_block": 14492835,
+      "nodes": 101,
+      "edges": 230,
+      "alerts": 8,
+      "labels": 77,
+      "metrics": {
+        "case_name": "ronin",
+        "address_recall": 0.5652,
+        "heuristic_precision": 0.5,
+        "heuristic_recall": 0.3333,
+        "cex_coverage": 0.0,
+        "latency_seconds": 27.493,
+        "breakdown": {
+          "addresses_found": 13,
+          "addresses_expected": 23,
+          "addresses_in_trace": 101,
+          "heuristics_hit": [
+            "cex",
+            "peel_chain"
+          ],
+          "heuristics_expected": [
+            "bridges",
+            "cex",
+            "tornado_cash"
+          ],
+          "heuristics_false_positives": [
+            "peel_chain"
+          ],
+          "heuristics_missing": [
+            "bridges",
+            "tornado_cash"
+          ],
+          "cex_exchanges_found": [],
+          "cex_exchanges_expected": [
+            "crypto.com",
+            "ftx",
+            "huobi"
+          ]
+        },
+        "notes": [
+          "Fałszywe alarmy (kategorie nie oczekiwane wg ground truth): ['peel_chain']",
+          "Brakujace heurystyki (oczekiwane ale brak alertu): ['bridges', 'tornado_cash']"
+        ]
+      },
+      "cache": {
+        "mode": "refresh",
+        "providers": {
+          "etherscan": {
+            "hit": 0,
+            "miss": 38
+          },
+          "arkham": {
+            "hit": 0,
+            "miss": 101
+          }
+        }
+      },
+      "error": null
+    },
+    {
+      "case": "euler",
+      "address": "0xb2698c2D99aD2c302a95a8DB26B08D17a77cEDd4",
+      "hops": 2,
+      "start_block": 16817996,
+      "end_block": 16867996,
+      "nodes": 53,
+      "edges": 110,
+      "alerts": 2,
+      "labels": 44,
+      "metrics": {
+        "case_name": "euler",
+        "address_recall": 0.3333,
+        "heuristic_precision": 0.0,
+        "heuristic_recall": 0.0,
+        "cex_coverage": 0.0,
+        "latency_seconds": 20.103,
+        "breakdown": {
+          "addresses_found": 2,
+          "addresses_expected": 6,
+          "addresses_in_trace": 53,
+          "heuristics_hit": [
+            "cex"
+          ],
+          "heuristics_expected": [
+            "bridges",
+            "tornado_cash"
+          ],
+          "heuristics_false_positives": [
+            "cex"
+          ],
+          "heuristics_missing": [
+            "bridges",
+            "tornado_cash"
+          ],
+          "cex_exchanges_found": [],
+          "cex_exchanges_expected": []
+        },
+        "notes": [
+          "Fałszywe alarmy (kategorie nie oczekiwane wg ground truth): ['cex']",
+          "Brakujace heurystyki (oczekiwane ale brak alertu): ['bridges', 'tornado_cash']",
+          "Brak oczekiwanych gield - cex_coverage=0 to artefakt."
+        ]
+      },
+      "cache": {
+        "mode": "refresh",
+        "providers": {
+          "etherscan": {
+            "hit": 0,
+            "miss": 26
+          },
+          "arkham": {
+            "hit": 0,
+            "miss": 53
+          }
+        }
+      },
+      "error": null
+    },
+    {
+      "case": "nomad",
+      "address": "0xa8c83b1b30291a3a1a118058b5445cc83041cd9d",
+      "hops": 2,
+      "start_block": 15259101,
+      "end_block": 15309101,
+      "nodes": 185,
+      "edges": 324,
+      "alerts": 12,
+      "labels": 124,
+      "metrics": {
+        "case_name": "nomad",
+        "address_recall": 0.75,
+        "heuristic_precision": 0.5,
+        "heuristic_recall": 0.3333,
+        "cex_coverage": 0.0,
+        "latency_seconds": 30.437,
+        "breakdown": {
+          "addresses_found": 6,
+          "addresses_expected": 8,
+          "addresses_in_trace": 185,
+          "heuristics_hit": [
+            "cex",
+            "peel_chain"
+          ],
+          "heuristics_expected": [
+            "bridges",
+            "cex",
+            "tornado_cash"
+          ],
+          "heuristics_false_positives": [
+            "peel_chain"
+          ],
+          "heuristics_missing": [
+            "bridges",
+            "tornado_cash"
+          ],
+          "cex_exchanges_found": [],
+          "cex_exchanges_expected": []
+        },
+        "notes": [
+          "Fałszywe alarmy (kategorie nie oczekiwane wg ground truth): ['peel_chain']",
+          "Brakujace heurystyki (oczekiwane ale brak alertu): ['bridges', 'tornado_cash']",
+          "Brak oczekiwanych gield - cex_coverage=0 to artefakt."
+        ]
+      },
+      "cache": {
+        "mode": "refresh",
+        "providers": {
+          "etherscan": {
+            "hit": 0,
+            "miss": 40
+          },
+          "arkham": {
+            "hit": 0,
+            "miss": 185
+          }
+        }
+      },
+      "error": null
+    }
+  ]
+}

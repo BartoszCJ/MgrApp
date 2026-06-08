@@ -56,8 +56,10 @@ def detect_tornado(transactions: list[Transaction], root_address: str) -> list[A
     """Generuje alerty Tornado dla transakcji sledzonego adresu.
 
     Args:
-        transactions: lista transakcji zwrocona przez Etherscan (txlist + tokentx).
-        root_address: adres ktorego dotyczy trace (do wskazania kierunku ruchu).
+        transactions: pelen zestaw tx z grafu BFS (ETH + ERC-20), nie tylko roota.
+        root_address: adres glowny trace (kontekst). Heurystyka analizuje CALY graf -
+            alert wskazuje observed_address (kto dotknal Tornado), a metadata.is_root
+            mowi czy to root, czy adres posredni z grafu.
 
     Returns:
         lista Alert posortowana wg block_number (najnowsze pierwsze).
@@ -68,30 +70,31 @@ def detect_tornado(transactions: list[Transaction], root_address: str) -> list[A
 
     root = root_address.lower()
     alerts: list[Alert] = []
-    # Grupowanie wielu transakcji do tego samego puli w jeden alert (zmniejsza spam)
-    seen: dict[tuple[str, str], dict] = {}
+    # Grupujemy per (pula Tornado, kierunek, obserwowany adres). Obserwowany adres to
+    # strona NIE-Tornado: przy deposit nadawca, przy withdraw odbiorca. Dzieki temu
+    # lapiemy tez adresy posrednie z grafu BFS, nie tylko bezposredni kontakt roota.
+    seen: dict[tuple[str, str, str], dict] = {}
 
     for tx in transactions:
         from_addr = tx.from_address.lower()
         to_addr = (tx.to_address or "").lower()
 
-        for counterparty, direction in (
-            (to_addr, "deposit"),
-            (from_addr, "withdraw"),
+        for counterparty, observed, direction in (
+            (to_addr, from_addr, "deposit"),
+            (from_addr, to_addr, "withdraw"),
         ):
             if not counterparty or counterparty not in db:
                 continue
-            # Filtruj wlasciwy kierunek: deposit = my -> tornado, withdraw = tornado -> my
-            if direction == "deposit" and from_addr != root:
-                continue
-            if direction == "withdraw" and to_addr != root:
+            # observed musi istniec i nie byc samym Tornado (pomija Tornado->Tornado)
+            if not observed or observed in db:
                 continue
 
             meta = db[counterparty]
-            key = (counterparty, direction)
+            key = (counterparty, direction, observed)
             bucket = seen.setdefault(
                 key,
                 {
+                    "observed": observed,
                     "count": 0,
                     "first_block": tx.block_number,
                     "last_block": tx.block_number,
@@ -108,25 +111,29 @@ def detect_tornado(transactions: list[Transaction], root_address: str) -> list[A
             bucket["tx_hashes"].append(tx.hash)
             bucket["total_value"] += tx.value_eth
 
-    for (counterparty, direction), agg in seen.items():
+    for (counterparty, direction, observed), agg in seen.items():
         denom = agg["denomination"]
         asset = agg["asset"]
         kind = agg["kind"]
         count = agg["count"]
+        is_root = observed == root
+        short = f"{observed[:6]}...{observed[-4:]}"
+        who = "Sledzony adres (root)" if is_root else f"Adres posredni {short}"
+        via = "" if is_root else f" przez {short}"
 
         denom_str = f"pula {denom} {asset}" if kind == "pool" and denom is not None else kind
 
         if direction == "deposit":
-            title = f"Deposit do Tornado Cash ({denom_str}, {count} tx)"
+            title = f"Deposit do Tornado Cash{via} ({denom_str}, {count} tx)"
             message = (
-                f"Sledzony adres wyslal srodki do Tornado Cash ({denom_str}). "
+                f"{who} wyslal srodki do Tornado Cash ({denom_str}). "
                 f"To moment ukrycia srodkow - mixer zacieta dalsze sledzenie po grafie. "
                 f"Tornado Cash jest na liscie sankcji OFAC od 2022-08-08."
             )
         else:
-            title = f"Withdraw z Tornado Cash ({denom_str}, {count} tx)"
+            title = f"Withdraw z Tornado Cash{via} ({denom_str}, {count} tx)"
             message = (
-                f"Sledzony adres otrzymal srodki z Tornado Cash ({denom_str}). "
+                f"{who} otrzymal srodki z Tornado Cash ({denom_str}). "
                 f"Srodki sa Tornado-tainted (powiazane z mixerem). "
                 f"Klasyczny sygnal pranie krypto."
             )
@@ -137,9 +144,11 @@ def detect_tornado(transactions: list[Transaction], root_address: str) -> list[A
                 severity="critical",
                 title=title,
                 message=message,
-                related_addresses=[counterparty],
+                related_addresses=[observed, counterparty],
                 related_tx_hashes=agg["tx_hashes"][:5],  # max 5 zeby nie zalewac UI
                 metadata={
+                    "observed_address": observed,
+                    "is_root": is_root,
                     "tornado_kind": kind,
                     "asset": asset,
                     "denomination": denom,

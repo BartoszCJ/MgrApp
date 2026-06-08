@@ -72,9 +72,11 @@ const PRESETS: Preset[] = [
   },
   {
     key: "euler",
+    // Seed = attacker_root (Euler Finance Exploiter 1) z backend/data/ground_truth/euler.json.
+    // Wczesniej byl tu adres spoza ground truth -> 0% address recall (BFS startowal ze zlego miejsca).
     label: "Euler Finance ($197M, 2023)",
-    address: "0x5b94fdc888c58dad24192573bba64e718db1408c",
-    description: "Klasyczny user Tornado Cash. Czesc srodkow zwrocona.",
+    address: "0xb2698c2D99aD2c302a95a8DB26B08D17a77cEDd4",
+    description: "Glowny EOA exploitera. Czesc srodkow przez Tornado, reszta zwrocona po negocjacjach.",
     incident: {
       date: "2023-03-13",
       attackBlock: 16817996,
@@ -844,7 +846,7 @@ function MetricsTab({ result }: { result: TraceResult }) {
         <MetricBar
           label="CEX Coverage"
           value={metrics.cex_coverage}
-          description={`Pokrycie oczekiwanych gield. Znalezione: ${(b.cex_exchanges_found ?? []).join(", ") || "brak"} / oczekiwane: ${(b.cex_exchanges_expected ?? []).join(", ") || "brak"}.`}
+          description={`Udokumentowane adresy CEX-deposit (ground truth) osiagniete przez BFS: ${b.cex_destination_addresses_found ?? 0}/${b.cex_destination_addresses_expected ?? 0}. Gieldy: ${(b.cex_destination_exchanges_found ?? []).join(", ") || "brak"} / oczekiwane: ${(b.cex_destination_exchanges_expected ?? []).join(", ") || "brak"}.`}
         />
       </div>
 
@@ -868,9 +870,10 @@ function MetricsTab({ result }: { result: TraceResult }) {
             </dd>
           </div>
           <div className="flex justify-between border-b border-neutral-800 pb-2">
-            <dt className="text-neutral-400">CEX znalezione</dt>
+            <dt className="text-neutral-400">CEX adresy (ground truth)</dt>
             <dd className="font-mono text-neutral-200">
-              {(b.cex_exchanges_found ?? []).length} / {(b.cex_exchanges_expected ?? []).length}
+              {b.cex_destination_addresses_found ?? 0} /{" "}
+              {b.cex_destination_addresses_expected ?? 0}
             </dd>
           </div>
         </dl>

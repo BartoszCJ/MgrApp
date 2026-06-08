@@ -15,6 +15,8 @@ Roznica V1 vs V2:
 - V1 zostal deprecated 31 maja 2025.
 """
 
+import asyncio
+import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TypeAlias
@@ -44,12 +46,21 @@ class EtherscanClient:
         api_key: str | None = None,
         chain_id: int = ETHEREUM_MAINNET_CHAIN_ID,
         timeout: float = 10.0,
+        min_interval: float = 0.4,
+        max_retries: int = 3,
     ):
         self.api_key = api_key or settings.etherscan_api_key
         self.chain_id = chain_id
         if not self.api_key:
             logger.warning("Brak ETHERSCAN_API_KEY - bedzie dzialac z rate limitem 1 req / 5s")
         self.client = httpx.AsyncClient(timeout=timeout)
+        # Rate limiting: free tier ~3-5 req/s. Serializujemy zapytania z odstepem
+        # min_interval, zeby BFS nie wywalal "Max calls per sec rate limit reached".
+        self._rate_lock = asyncio.Lock()
+        self._last_request = 0.0
+        self._min_interval = min_interval
+        self._max_retries = max_retries
+        self._retry_delay = 1.0
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -125,15 +136,41 @@ class EtherscanClient:
         if env is not None:
             return env["payload"]
 
-        response = await self.client.get(ETHERSCAN_BASE_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
+        data, status_code = await self._throttled_request(params)
 
         status_ok = data.get("status") == "1"
         no_tx = "No transactions found" in str(data.get("message", ""))
         if status_ok or no_tx:
-            cache.write("etherscan", action, dict(params), data, response.status_code)
+            cache.write("etherscan", action, dict(params), data, status_code)
         return data
+
+    async def _throttled_request(self, params: dict[str, QueryParamValue]) -> tuple[dict, int]:
+        """GET z odstepem min_interval miedzy zapytaniami + retry na rate limit.
+
+        Etherscan zglasza rate limit jako HTTP 200 ze statusem '0' i komunikatem
+        'Max calls per sec rate limit reached' - dlatego retry patrzy na tresc, nie na HTTP.
+        Lock serializuje zapytania, wiec rownolegly BFS nie przekracza limitu.
+        """
+        data: dict = {}
+        status_code = 0
+        for attempt in range(self._max_retries + 1):
+            async with self._rate_lock:
+                wait = self._min_interval - (time.monotonic() - self._last_request)
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                response = await self.client.get(ETHERSCAN_BASE_URL, params=params)
+                self._last_request = time.monotonic()
+
+            response.raise_for_status()
+            status_code = response.status_code
+            data = response.json()
+
+            blob = f"{data.get('message', '')} {data.get('result', '')}".lower()
+            if "rate limit" in blob and attempt < self._max_retries:
+                await asyncio.sleep(self._retry_delay * (attempt + 1))
+                continue
+            return data, status_code
+        return data, status_code
 
     async def get_normal_transactions(
         self,

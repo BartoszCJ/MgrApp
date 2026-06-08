@@ -59,8 +59,11 @@ export type MetricsReport = {
     heuristics_expected?: string[];
     heuristics_false_positives?: string[];
     heuristics_missing?: string[];
-    cex_exchanges_found?: string[];
-    cex_exchanges_expected?: string[];
+    cex_destination_addresses_found?: number;
+    cex_destination_addresses_expected?: number;
+    cex_destination_exchanges_found?: string[];
+    cex_destination_exchanges_expected?: string[];
+    cex_alert_exchanges_detected_raw?: string[];
     [k: string]: unknown;
   };
   notes: string[];

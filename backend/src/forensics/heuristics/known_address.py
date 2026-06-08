@@ -59,28 +59,30 @@ def detect_known_group(
         return []
 
     root = root_address.lower()
-    # klucz: (counterparty, direction) - grupujemy wiele transakcji do tego samego adresu w 1 alert
-    seen: dict[tuple[str, str], dict] = {}
+    # Klucz: (znany adres, kierunek, obserwowany adres). Obserwowany to strona NIE-znana:
+    # przy outgoing nadawca, przy incoming odbiorca. Lapiemy adresy posrednie z grafu BFS,
+    # nie tylko bezposredni kontakt roota.
+    seen: dict[tuple[str, str, str], dict] = {}
 
     for tx in transactions:
         from_addr = tx.from_address.lower()
         to_addr = (tx.to_address or "").lower()
 
-        for counterparty, direction in (
-            (to_addr, "outgoing"),
-            (from_addr, "incoming"),
+        for counterparty, observed, direction in (
+            (to_addr, from_addr, "outgoing"),
+            (from_addr, to_addr, "incoming"),
         ):
             if not counterparty or counterparty not in db:
                 continue
-            if direction == "outgoing" and from_addr != root:
-                continue
-            if direction == "incoming" and to_addr != root:
+            # observed musi istniec i nie byc samym znanym adresem (pomija endpoint->endpoint)
+            if not observed or observed in db:
                 continue
 
-            key = (counterparty, direction)
+            key = (counterparty, direction, observed)
             bucket = seen.setdefault(
                 key,
                 {
+                    "observed": observed,
                     "name": db[counterparty].get("name", counterparty),
                     "count": 0,
                     "tx_hashes": [],
@@ -99,33 +101,37 @@ def detect_known_group(
                 bucket["tokens"].add(tx.token_symbol)
 
     alerts: list[Alert] = []
-    for (counterparty, direction), agg in seen.items():
+    for (counterparty, direction, observed), agg in seen.items():
+        is_root = observed == root
+        short = f"{observed[:6]}...{observed[-4:]}"
+        who = "Sledzony adres (root)" if is_root else f"Adres posredni {short}"
+        via = "" if is_root else f" (przez {short})"
         tokens_str = ", ".join(sorted(agg["tokens"])) or "ETH"
         direction_pl = "do" if direction == "outgoing" else "z"
         verb_pl = "wyslal srodki" if direction == "outgoing" else "otrzymal srodki"
 
         if category == "bridge":
-            title = f"Kontakt z bridge: {agg['name']} ({agg['count']} tx, {tokens_str})"
+            title = f"Kontakt z bridge: {agg['name']}{via} ({agg['count']} tx, {tokens_str})"
             message = (
-                f"Sledzony adres {verb_pl} {direction_pl} bridge'a {agg['name']}. "
+                f"{who} {verb_pl} {direction_pl} bridge'a {agg['name']}. "
                 f"Klasyczny hopping cross-chain - srodki moga byc teraz na innym chainie. "
                 f"Wymaga sledzenia na drugim koncu bridge."
             )
         elif category == "cex":
-            title = f"Kontakt z CEX: {agg['name']} ({agg['count']} tx, {tokens_str})"
+            title = f"Kontakt z CEX: {agg['name']}{via} ({agg['count']} tx, {tokens_str})"
             if direction == "outgoing":
                 message = (
-                    f"Sledzony adres zdeponowal srodki na giełde {agg['name']}. "
+                    f"{who} zdeponowal srodki na giełde {agg['name']}. "
                     f"To moment cashout - dalsze sledzenie wymaga subpoeny do giełdy."
                 )
             else:
                 message = (
-                    f"Sledzony adres dostal srodki z giełdy {agg['name']} (withdrawal). "
+                    f"{who} dostal srodki z giełdy {agg['name']} (withdrawal). "
                     f"Mozliwe finansowanie operacji z konta KYC."
                 )
         else:
-            title = f"Kontakt z {group_name}: {agg['name']} ({agg['count']} tx)"
-            message = f"Sledzony adres {verb_pl} {direction_pl} {agg['name']}."
+            title = f"Kontakt z {group_name}: {agg['name']}{via} ({agg['count']} tx)"
+            message = f"{who} {verb_pl} {direction_pl} {agg['name']}."
 
         alerts.append(
             Alert(
@@ -133,9 +139,11 @@ def detect_known_group(
                 severity=severity,
                 title=title,
                 message=message,
-                related_addresses=[counterparty],
+                related_addresses=[observed, counterparty],
                 related_tx_hashes=agg["tx_hashes"][:5],
                 metadata={
+                    "observed_address": observed,
+                    "is_root": is_root,
                     "group": group_name,
                     "name": agg["name"],
                     "tokens": sorted(agg["tokens"]),

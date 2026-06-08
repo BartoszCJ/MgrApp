@@ -146,7 +146,11 @@ def _allowed_categories(ground_truth: dict[str, Any]) -> set[str]:
 
 
 def _cex_exchanges_found(trace_result: TraceResult) -> set[str]:
-    """Zwraca zbior nazw giełd ktore pojawily sie w alertach CEX.
+    """Surowy sygnal: nazwy giełd z alertow CEX (z lokalnej cex.json).
+
+    UWAGA: to NIE jest juz zrodlo cex_coverage (Opcja B liczy po adresach
+    destinations_cex z ground truth). Tu zostaje tylko jako informacyjny
+    `cex_alert_exchanges_detected_raw` w breakdown.
 
     Nazwa wyciagana z `Alert.metadata.name` (ustawiane przez known_address.py).
     Lowercase do porownywania. Wycinamy szczegóły typu 'Binance Hot Wallet 7'
@@ -166,14 +170,22 @@ def _cex_exchanges_found(trace_result: TraceResult) -> set[str]:
     return exchanges
 
 
-def _cex_exchanges_expected(ground_truth: dict[str, Any]) -> set[str]:
-    """Zwraca zbior nazw oczekiwanych giełd (z expected_heuristic_hits.cex.exchanges)."""
-    expected: set[str] = set()
-    cex_spec = ground_truth.get("expected_heuristic_hits", {}).get("cex", {})
-    for exchange in cex_spec.get("exchanges", []) or []:
-        if isinstance(exchange, str):
-            expected.add(exchange.split()[0].lower())
-    return expected
+def _cex_destinations(ground_truth: dict[str, Any]) -> dict[str, str]:
+    """Mapa adres(lower) -> nazwa gieldy z ground_truth.addresses.destinations_cex.
+
+    To jest baza OCENY dla cex_coverage (Opcja B): liczymy ile udokumentowanych
+    adresow CEX-deposit nasz BFS faktycznie osiagnal. Niezalezne od lokalnej
+    cex.json (baza DETEKCYJNA heurystyki), zeby metryka nie byla cyrkularna.
+    """
+    out: dict[str, str] = {}
+    entries = ground_truth.get("addresses", {}).get("destinations_cex", [])
+    if not isinstance(entries, list):
+        return out
+    for entry in entries:
+        addr = entry.get("address", "")
+        if isinstance(addr, str) and addr.startswith("0x") and len(addr) == 42:
+            out[addr.lower()] = entry.get("exchange", "?")
+    return out
 
 
 def _safe_div(numerator: int, denominator: int) -> float:
@@ -225,10 +237,16 @@ def compute_metrics(
         len(expected_categories),
     )
 
-    # CEX coverage ------------------------------------------------------------
-    cex_expected = _cex_exchanges_expected(ground_truth)
-    cex_found = _cex_exchanges_found(trace_result) & cex_expected
-    cex_coverage = _safe_div(len(cex_found), len(cex_expected))
+    # CEX coverage (Opcja B) --------------------------------------------------
+    # Liczona po ADRESACH destinations_cex z ground truth, NIE po nazwach z cex.json.
+    # cex.json zostaje baza detekcyjna heurystyki, ground truth - baza oceny.
+    cex_destinations = _cex_destinations(ground_truth)  # adres(lower) -> nazwa gieldy
+    cex_dest_expected = set(cex_destinations)
+    cex_dest_found = cex_dest_expected & found_addrs
+    cex_coverage = _safe_div(len(cex_dest_found), len(cex_dest_expected))
+    cex_dest_exchanges_expected = sorted(set(cex_destinations.values()))
+    cex_dest_exchanges_found = sorted({cex_destinations[a] for a in cex_dest_found})
+    cex_alert_exchanges_raw = sorted(_cex_exchanges_found(trace_result))
 
     # Notes -------------------------------------------------------------------
     notes: list[str] = []
@@ -245,8 +263,10 @@ def compute_metrics(
         notes.append("Brak oczekiwan heurystyk w ground truth - heuristic_recall=0 to artefakt.")
     if len(expected_addrs) == 0:
         notes.append("Brak adresow w ground truth - address_recall=0 to artefakt.")
-    if not cex_expected:
-        notes.append("Brak oczekiwanych gield - cex_coverage=0 to artefakt.")
+    if not cex_dest_expected:
+        notes.append(
+            "Brak adresow destinations_cex w ground truth - cex_coverage=0 to artefakt."
+        )
 
     breakdown: dict[str, Any] = {
         "addresses_found": len(addrs_found),
@@ -256,8 +276,11 @@ def compute_metrics(
         "heuristics_expected": sorted(expected_categories),
         "heuristics_false_positives": sorted(false_positives),
         "heuristics_missing": sorted(missing),
-        "cex_exchanges_found": sorted(cex_found),
-        "cex_exchanges_expected": sorted(cex_expected),
+        "cex_destination_addresses_found": len(cex_dest_found),
+        "cex_destination_addresses_expected": len(cex_dest_expected),
+        "cex_destination_exchanges_found": cex_dest_exchanges_found,
+        "cex_destination_exchanges_expected": cex_dest_exchanges_expected,
+        "cex_alert_exchanges_detected_raw": cex_alert_exchanges_raw,
     }
 
     logger.info(

@@ -175,42 +175,53 @@ def test_heuristic_recall_zero_when_no_alerts() -> None:
     assert metrics.heuristic_precision == 0.0  # 0/0 -> 0.0 wg _safe_div
 
 
-# compute_metrics: cex coverage ----------------------------------------------
+# compute_metrics: cex coverage (Opcja B - po adresach destinations_cex) ------
 
 
-def test_cex_coverage_full_when_all_exchanges_found() -> None:
-    """Ronin oczekuje Huobi, FTX, Crypto.com - trafiamy wszystkie 3."""
-    result = _make_result(
-        graph_addresses=[ROOT],
-        alerts=[
-            _alert("cex_outgoing", metadata={"name": "Huobi"}),
-            _alert("cex_outgoing", metadata={"name": "FTX"}),
-            _alert("cex_outgoing", metadata={"name": "Crypto.com"}),
-        ],
-    )
+def _ronin_cex_destinations() -> list[str]:
+    gt = load_ground_truth("ronin")
+    return [e["address"] for e in gt["addresses"]["destinations_cex"]]
+
+
+def test_cex_coverage_full_when_all_destination_addresses_reached() -> None:
+    """Graf zawiera wszystkie adresy destinations_cex z ronin.json -> coverage 1.0."""
+    dests = _ronin_cex_destinations()
+    result = _make_result(graph_addresses=[ROOT, *dests])
     metrics = compute_metrics(result, "ronin", latency_seconds=1.0)
     assert metrics.cex_coverage == 1.0
-    assert len(metrics.breakdown["cex_exchanges_found"]) == 3
+    assert metrics.breakdown["cex_destination_addresses_found"] == len(dests)
+    assert metrics.breakdown["cex_destination_addresses_expected"] == len(dests)
+    assert set(metrics.breakdown["cex_destination_exchanges_found"]) == {
+        "Huobi",
+        "FTX",
+        "Crypto.com",
+    }
 
 
-def test_cex_coverage_partial() -> None:
-    """Tylko Huobi z 3 oczekiwanych gield."""
+def test_cex_coverage_partial_by_address() -> None:
+    """2 z N adresow destinations_cex osiagniete (Huobi + FTX)."""
+    dests = _ronin_cex_destinations()
+    result = _make_result(graph_addresses=[ROOT, HUOBI_DEPOSIT, FTX_DEPOSIT])
+    metrics = compute_metrics(result, "ronin", latency_seconds=1.0)
+    assert metrics.breakdown["cex_destination_addresses_found"] == 2
+    assert metrics.cex_coverage == pytest.approx(2 / len(dests), abs=0.001)
+    assert set(metrics.breakdown["cex_destination_exchanges_found"]) == {"Huobi", "FTX"}
+
+
+def test_cex_coverage_ignores_alert_names() -> None:
+    """Coverage liczona po ADRESACH, nie po nazwach z alertow.
+
+    Alert 'Huobi' bez dotarcia do adresu destinations_cex -> coverage 0, ale raw
+    sygnal z alertu trafia do breakdown.cex_alert_exchanges_detected_raw.
+    """
     result = _make_result(
         graph_addresses=[ROOT],
-        alerts=[_alert("cex_outgoing", metadata={"name": "Huobi Hot Wallet 7"})],
+        alerts=[_alert("cex_outgoing", metadata={"name": "Huobi"})],
     )
     metrics = compute_metrics(result, "ronin", latency_seconds=1.0)
-    assert metrics.cex_coverage == pytest.approx(1 / 3, abs=0.01)
-
-
-def test_cex_coverage_normalizes_exchange_name() -> None:
-    """'Binance Hot Wallet 7' -> 'binance' do porownania."""
-    result = _make_result(
-        graph_addresses=[ROOT],
-        alerts=[_alert("cex_outgoing", metadata={"name": "Huobi Cold Storage"})],
-    )
-    metrics = compute_metrics(result, "ronin", latency_seconds=1.0)
-    assert "huobi" in metrics.breakdown["cex_exchanges_found"]
+    assert metrics.cex_coverage == 0.0
+    assert metrics.breakdown["cex_destination_addresses_found"] == 0
+    assert "huobi" in metrics.breakdown["cex_alert_exchanges_detected_raw"]
 
 
 # compute_metrics: latency + notes ------------------------------------------
