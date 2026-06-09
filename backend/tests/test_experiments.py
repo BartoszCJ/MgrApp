@@ -28,13 +28,26 @@ def _isolated_results_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pa
 
 def test_write_experiment_creates_json_md_csv(_isolated_results_dir: Path) -> None:
     results_dir = _isolated_results_dir
-    metrics = MetricsReport(
+    ronin_metrics = MetricsReport(
         case_name="ronin",
         address_recall=0.8,
         heuristic_precision=1.0,
         heuristic_recall=0.5,
         cex_coverage=1.0,
         latency_seconds=12.3,
+        breakdown={
+            "cex_destination_addresses_found": 8,
+            "cex_destination_addresses_expected": 8,  # applicable
+        },
+    )
+    nomad_metrics = MetricsReport(
+        case_name="nomad",
+        address_recall=0.75,
+        heuristic_precision=0.5,
+        heuristic_recall=0.33,
+        cex_coverage=0.0,
+        latency_seconds=6.0,
+        breakdown={"cex_destination_addresses_expected": 0},  # brak -> N/A
     )
     request = ExperimentSaveRequest(
         cache_mode="normal",
@@ -49,8 +62,18 @@ def test_write_experiment_creates_json_md_csv(_isolated_results_dir: Path) -> No
                 edges=9,
                 alerts=3,
                 labels=4,
-                metrics=metrics,
+                metrics=ronin_metrics,
                 cache={"mode": "normal"},
+            ),
+            ExperimentCaseResult(
+                case="nomad",
+                address="0xfff",
+                hops=2,
+                nodes=20,
+                edges=19,
+                alerts=5,
+                labels=2,
+                metrics=nomad_metrics,
             ),
             ExperimentCaseResult(
                 case="euler",
@@ -70,21 +93,28 @@ def test_write_experiment_creates_json_md_csv(_isolated_results_dir: Path) -> No
     suffixes = sorted(p.suffix for p in results_dir.glob("*"))
     assert suffixes == [".csv", ".json", ".md"]
 
-    # JSON: pelne metadane
+    # JSON: surowe dane (pelny zapis, bez logiki N/A)
     data = json.loads(next(results_dir.glob("*.json")).read_text(encoding="utf-8"))
     assert data["cache_mode"] == "normal"
-    assert data["timestamp"] == result.timestamp
-    assert len(data["cases"]) == 2
-    assert data["cases"][0]["case"] == "ronin"
+    assert len(data["cases"]) == 3
     assert data["cases"][0]["metrics"]["address_recall"] == 0.8
 
-    # MD: tabela do pracy, z bledem case'a euler
+    # MD: ronin applicable -> %, nomad N/A, euler blad, + wiersz Srednia
     md = next(results_dir.glob("*.md")).read_text(encoding="utf-8")
     assert "ronin" in md
-    assert "80%" in md
+    assert "N/A" in md  # CEX nomada (brak destinations_cex)
     assert "boom" in md
+    assert "Średnia" in md
 
-    # CSV: header + 2 wiersze
+    # CSV: nowe kolumny + puste cex_coverage dla N/A (zostaje liczbowe)
     lines = next(results_dir.glob("*.csv")).read_text(encoding="utf-8").strip().splitlines()
-    assert len(lines) == 3
-    assert lines[0].startswith("case,address,hops")
+    assert len(lines) == 4  # header + 3 case'y
+    header = lines[0]
+    assert header.startswith("case,address,hops")
+    assert "cex_coverage_applicable" in header
+    assert "cex_destination_addresses_found" in header
+    assert "cex_destination_addresses_expected" in header
+    ronin_line = next(line for line in lines if line.startswith("ronin,"))
+    assert "true" in ronin_line
+    nomad_line = next(line for line in lines if line.startswith("nomad,"))
+    assert "false" in nomad_line

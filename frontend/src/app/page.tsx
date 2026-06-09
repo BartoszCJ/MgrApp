@@ -843,11 +843,24 @@ function MetricsTab({ result }: { result: TraceResult }) {
           value={metrics.heuristic_recall}
           description={`Trafione: ${(b.heuristics_hit ?? []).join(", ") || "brak"} / oczekiwane: ${(b.heuristics_expected ?? []).join(", ") || "brak"}.`}
         />
-        <MetricBar
-          label="CEX Coverage"
-          value={metrics.cex_coverage}
-          description={`Udokumentowane adresy CEX-deposit (ground truth) osiagniete przez BFS: ${b.cex_destination_addresses_found ?? 0}/${b.cex_destination_addresses_expected ?? 0}. Gieldy: ${(b.cex_destination_exchanges_found ?? []).join(", ") || "brak"} / oczekiwane: ${(b.cex_destination_exchanges_expected ?? []).join(", ") || "brak"}.`}
-        />
+        {hasCexCoverageMetric(metrics) ? (
+          <MetricBar
+            label="CEX Coverage"
+            value={metrics.cex_coverage}
+            description={`Udokumentowane adresy CEX-deposit (ground truth) osiagniete przez BFS: ${b.cex_destination_addresses_found ?? 0}/${b.cex_destination_addresses_expected ?? 0}. Gieldy: ${(b.cex_destination_exchanges_found ?? []).join(", ") || "brak"} / oczekiwane: ${(b.cex_destination_exchanges_expected ?? []).join(", ") || "brak"}.`}
+          />
+        ) : (
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            <div className="mb-2 flex items-baseline justify-between">
+              <span className="text-sm font-medium text-neutral-200">CEX Coverage</span>
+              <span className="font-mono text-xl font-bold text-neutral-500">N/A</span>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Brak oczekiwanych adresow CEX w ground truth dla tego case&apos;a — metryka nie
+              dotyczy.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
@@ -965,40 +978,74 @@ function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
 
+// CEX coverage ma sens tylko gdy ground truth ma adresy destinations_cex. Bez nich
+// backend zwraca 0 (0/0) - co znaczy "brak czego mierzyc", nie "zly wynik". Czysto UI:
+// nie zmieniamy backendu ani matematyki, tylko decydujemy czy pokazac liczbe czy N/A.
+function hasCexCoverageMetric(metrics: MetricsReport | null): boolean {
+  return (metrics?.breakdown?.cex_destination_addresses_expected ?? 0) > 0;
+}
+
+function mean(nums: number[]): number {
+  return nums.reduce((s, n) => s + n, 0) / nums.length;
+}
+
 function buildExperimentMarkdown(rows: ExperimentRow[], hopsUsed: number): string {
   const head =
     "| Case | Address Recall | Heur. Precision | Heur. Recall | CEX Coverage | Węzły | Alerty | Latency [s] |";
   const sep = "|---|---|---|---|---|---|---|---|";
+  const cexCell = (r: ExperimentRow): string =>
+    r.metrics && hasCexCoverageMetric(r.metrics) ? pct(r.metrics.cex_coverage) : "N/A";
   const body = rows.map((r) =>
     r.metrics
       ? `| ${r.label} | ${pct(r.metrics.address_recall)} | ${pct(r.metrics.heuristic_precision)} | ` +
-        `${pct(r.metrics.heuristic_recall)} | ${pct(r.metrics.cex_coverage)} | ${r.nodes} | ` +
+        `${pct(r.metrics.heuristic_recall)} | ${cexCell(r)} | ${r.nodes} | ` +
         `${r.alerts} | ${r.metrics.latency_seconds.toFixed(2)} |`
       : `| ${r.label} | — | — | — | — | — | — | ${r.error ?? "błąd"} |`,
   );
+
+  // Wiersz Średnia - jak na ekranie: CEX usredniany TYLKO po case'ach z destinations_cex.
+  const ms = rows.map((r) => r.metrics).filter((m): m is MetricsReport => m !== null);
+  const cexMs = ms.filter((m) => hasCexCoverageMetric(m));
+  const avgRow =
+    ms.length > 0
+      ? `| **Średnia** | ${pct(mean(ms.map((m) => m.address_recall)))} | ` +
+        `${pct(mean(ms.map((m) => m.heuristic_precision)))} | ` +
+        `${pct(mean(ms.map((m) => m.heuristic_recall)))} | ` +
+        `${cexMs.length > 0 ? pct(mean(cexMs.map((m) => m.cex_coverage))) : "N/A"} | — | — | — |`
+      : null;
+
   const stamp = `<!-- hops=${hopsUsed}, okno incydentu ON, wygenerowano ${new Date()
     .toISOString()
     .slice(0, 10)} -->`;
-  return [stamp, head, sep, ...body].join("\n");
+  return [stamp, head, sep, ...body, ...(avgRow ? [avgRow] : [])].join("\n");
 }
 
 function buildExperimentCsv(rows: ExperimentRow[]): string {
   const head =
-    "case,address_recall,heuristic_precision,heuristic_recall,cex_coverage,nodes,alerts,latency_s";
-  const body = rows.map((r) =>
-    r.metrics
-      ? [
-          r.label,
-          r.metrics.address_recall,
-          r.metrics.heuristic_precision,
-          r.metrics.heuristic_recall,
-          r.metrics.cex_coverage,
-          r.nodes,
-          r.alerts,
-          r.metrics.latency_seconds,
-        ].join(",")
-      : [r.label, "", "", "", "", "", "", r.error ?? "error"].join(","),
-  );
+    "case,address_recall,heuristic_precision,heuristic_recall,cex_coverage," +
+    "cex_coverage_applicable,cex_destination_addresses_found,cex_destination_addresses_expected," +
+    "nodes,alerts,latency_s";
+  const body = rows.map((r) => {
+    if (!r.metrics) {
+      // 11 kolumn: blad w ostatniej, reszta pusta
+      return [r.label, "", "", "", "", "", "", "", "", "", r.error ?? "error"].join(",");
+    }
+    const applicable = hasCexCoverageMetric(r.metrics);
+    const b = r.metrics.breakdown;
+    return [
+      r.label,
+      r.metrics.address_recall,
+      r.metrics.heuristic_precision,
+      r.metrics.heuristic_recall,
+      applicable ? r.metrics.cex_coverage : "", // puste dla N/A - CSV zostaje liczbowe
+      applicable ? "true" : "false",
+      b.cex_destination_addresses_found ?? 0,
+      b.cex_destination_addresses_expected ?? 0,
+      r.nodes,
+      r.alerts,
+      r.metrics.latency_seconds,
+    ].join(",");
+  });
   return [head, ...body].join("\n");
 }
 
@@ -1016,6 +1063,17 @@ function ExperimentMetricCell({ value }: { value: number }) {
   const c = metricColor(value);
   return (
     <td className={`px-3 py-2 text-right font-mono font-semibold ${c.text}`}>{pct(value)}</td>
+  );
+}
+
+function NotApplicableCell() {
+  return (
+    <td
+      className="px-3 py-2 text-right font-mono text-neutral-500"
+      title="Brak adresow destinations_cex w ground truth - metryka nie dotyczy tego case'a"
+    >
+      N/A
+    </td>
   );
 }
 
@@ -1045,9 +1103,13 @@ function ExperimentPanel({
           address_recall: ms.reduce((s, m) => s + m.address_recall, 0) / ms.length,
           heuristic_precision: ms.reduce((s, m) => s + m.heuristic_precision, 0) / ms.length,
           heuristic_recall: ms.reduce((s, m) => s + m.heuristic_recall, 0) / ms.length,
-          cex_coverage: ms.reduce((s, m) => s + m.cex_coverage, 0) / ms.length,
         }
       : null;
+  // CEX coverage usredniamy TYLKO po case'ach, ktore maja co mierzyc (destinations_cex).
+  // Inaczej artefakty 0/0 (Euler/Nomad) zanizalyby srednia.
+  const cexMs = ms.filter((m) => hasCexCoverageMetric(m));
+  const avgCex =
+    cexMs.length > 0 ? cexMs.reduce((s, m) => s + m.cex_coverage, 0) / cexMs.length : null;
 
   // Zagregowane staty cache po wszystkich case'ach (ile poszlo z cache).
   const cacheAgg: Record<string, { hit: number; miss: number }> = {};
@@ -1072,10 +1134,9 @@ function ExperimentPanel({
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">Eksperyment — 3 case studies</h2>
+          <h2 className="text-lg font-semibold"> 3 case studies</h2>
           <p className="text-xs text-neutral-500">
-            Ronin / Euler / Nomad · hops={hopsUsed} · okno incydentu ON · porownanie z ground
-            truth.
+            Ronin / Euler / Nomad · hops={hopsUsed} · okno incydentu ON
           </p>
         </div>
         {!running && ms.length > 0 && (
@@ -1130,7 +1191,11 @@ function ExperimentPanel({
                     <ExperimentMetricCell value={r.metrics.address_recall} />
                     <ExperimentMetricCell value={r.metrics.heuristic_precision} />
                     <ExperimentMetricCell value={r.metrics.heuristic_recall} />
-                    <ExperimentMetricCell value={r.metrics.cex_coverage} />
+                    {hasCexCoverageMetric(r.metrics) ? (
+                      <ExperimentMetricCell value={r.metrics.cex_coverage} />
+                    ) : (
+                      <NotApplicableCell />
+                    )}
                     <td className="px-3 py-2 text-right font-mono text-neutral-300">{r.nodes}</td>
                     <td className="px-3 py-2 text-right font-mono text-neutral-300">{r.alerts}</td>
                     <td className="px-3 py-2 text-right font-mono text-neutral-400">
@@ -1150,7 +1215,11 @@ function ExperimentPanel({
                 <ExperimentMetricCell value={avg.address_recall} />
                 <ExperimentMetricCell value={avg.heuristic_precision} />
                 <ExperimentMetricCell value={avg.heuristic_recall} />
-                <ExperimentMetricCell value={avg.cex_coverage} />
+                {avgCex !== null ? (
+                  <ExperimentMetricCell value={avgCex} />
+                ) : (
+                  <NotApplicableCell />
+                )}
                 <td className="px-3 py-2 text-right text-neutral-600">—</td>
                 <td className="px-3 py-2 text-right text-neutral-600">—</td>
                 <td className="px-3 py-2 text-right text-neutral-600">—</td>
@@ -1297,6 +1366,7 @@ export default function HomePage() {
           start_block: startBlock,
           end_block: endBlock,
           refresh,
+          skip_labels: true, // eksperyment liczy metryki - Arkham zbedny, nie pal limitu
           case_name: preset.key,
         });
         rows.push({
@@ -1478,7 +1548,7 @@ export default function HomePage() {
               title="Uruchamia Ronin + Euler + Nomad z aktualnym hops i oknem incydentu, buduje tabele porownawcza metryk do pracy"
               className="rounded-md border border-emerald-700 bg-emerald-700/20 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-700/40 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {expRunning ? "Eksperyment…" : "Eksperyment 3×"}
+              {expRunning ? "Eksperyment…" : "Eksperyment 3 case'y"}
             </button>
           </div>
 

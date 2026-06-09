@@ -119,13 +119,19 @@ async def trace(request: TraceRequest) -> TraceResult:
 
     notes: list[str] = []
     labels_map: dict = {}
-    try:
-        labels_map = await app.state.arkham.get_many(list(addresses_to_label))
-    except ArkhamError as exc:
-        notes.append(f"Arkham nieaktywny: {exc}")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Arkham batch failed: {}", exc)
-        notes.append("Arkham batch failed (zobacz logi backendu).")
+    if request.skip_labels:
+        notes.append(
+            "Arkham pominiety (skip_labels=true) - etykiety nie pobrane, "
+            "metryki ich nie potrzebuja."
+        )
+    else:
+        try:
+            labels_map = await app.state.arkham.get_many(list(addresses_to_label))
+        except ArkhamError as exc:
+            notes.append(f"Arkham nieaktywny: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Arkham batch failed: {}", exc)
+            notes.append("Arkham batch failed (zobacz logi backendu).")
 
     # Heurystyki na pelnym zestawie tx (caly graf, nie tylko hop 0)
     alerts = [

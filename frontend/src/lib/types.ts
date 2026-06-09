@@ -35,6 +35,7 @@ export type TraceRequest = {
   end_block?: number | null;
   case_name?: string | null;
   refresh?: boolean; // pomin cache i pobierz na zywo
+  skip_labels?: boolean; // pomin Arkham (etykiety) - metryki ich nie potrzebuja
 };
 
 export type ProviderCache = { hit: number; miss: number };

@@ -87,6 +87,13 @@ class TraceRequest(BaseModel):
             "Do pokazania, ze API faktycznie dziala."
         ),
     )
+    skip_labels: bool = Field(
+        default=False,
+        description=(
+            "Pomin pobieranie etykiet z Arkham (get_many). Metryki ich NIE uzywaja, "
+            "wiec eksperyment moze je pominac, zeby nie palic free tier Arkhama."
+        ),
+    )
 
 
 class Alert(BaseModel):

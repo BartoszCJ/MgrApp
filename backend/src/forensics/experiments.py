@@ -25,6 +25,7 @@ from forensics.core.models import (
     ExperimentCaseResult,
     ExperimentSaveRequest,
     ExperimentSaveResult,
+    MetricsReport,
 )
 
 # backend/src/forensics/experiments.py -> backend/ -> MgrApp/
@@ -67,6 +68,17 @@ def _pct(v: float) -> str:
     return f"{round(v * 100)}%"
 
 
+def _cex_applicable(metrics: MetricsReport | None) -> bool:
+    """CEX coverage ma sens tylko gdy ground truth ma adresy destinations_cex.
+
+    Bez nich compute_metrics zwraca 0 (0/0) - co znaczy 'brak czego mierzyc',
+    nie 'zly wynik'. W eksporcie pokazujemy wtedy N/A (jak na ekranie).
+    """
+    if metrics is None:
+        return False
+    return bool(metrics.breakdown.get("cex_destination_addresses_expected", 0) > 0)
+
+
 def _build_markdown(request: ExperimentSaveRequest, timestamp: str, commit: str | None) -> str:
     lines = [
         f"# Eksperyment {timestamp}",
@@ -81,15 +93,32 @@ def _build_markdown(request: ExperimentSaveRequest, timestamp: str, commit: str 
     for c in request.cases:
         if c.metrics is not None:
             m = c.metrics
+            cex = _pct(m.cex_coverage) if _cex_applicable(m) else "N/A"
             lines.append(
                 f"| {c.case} | {_pct(m.address_recall)} | {_pct(m.heuristic_precision)} "
-                f"| {_pct(m.heuristic_recall)} | {_pct(m.cex_coverage)} | {c.nodes} "
+                f"| {_pct(m.heuristic_recall)} | {cex} | {c.nodes} "
                 f"| {c.edges} | {c.alerts} | {c.labels} | {m.latency_seconds:.2f} |"
             )
         else:
             lines.append(
                 f"| {c.case} | — | — | — | — | — | — | — | — | {c.error or 'błąd'} |"
             )
+
+    # Wiersz Srednia - jak na ekranie: CEX usredniany TYLKO po case'ach z destinations_cex.
+    metrics_list = [c.metrics for c in request.cases if c.metrics is not None]
+    if metrics_list:
+        cex_list = [m for m in metrics_list if _cex_applicable(m)]
+        avg_cex = (
+            _pct(sum(m.cex_coverage for m in cex_list) / len(cex_list)) if cex_list else "N/A"
+        )
+        lines.append(
+            "| **Średnia** "
+            f"| {_pct(sum(m.address_recall for m in metrics_list) / len(metrics_list))} "
+            f"| {_pct(sum(m.heuristic_precision for m in metrics_list) / len(metrics_list))} "
+            f"| {_pct(sum(m.heuristic_recall for m in metrics_list) / len(metrics_list))} "
+            f"| {avg_cex} | — | — | — | — | — |"
+        )
+
     return "\n".join(lines) + "\n"
 
 
@@ -100,12 +129,16 @@ def _csv_cell(value: object) -> str:
 def _build_csv(request: ExperimentSaveRequest) -> str:
     head = (
         "case,address,hops,start_block,end_block,cache_mode,address_recall,"
-        "heuristic_precision,heuristic_recall,cex_coverage,nodes,edges,alerts,"
-        "labels,latency_s,error"
+        "heuristic_precision,heuristic_recall,cex_coverage,cex_coverage_applicable,"
+        "cex_destination_addresses_found,cex_destination_addresses_expected,"
+        "nodes,edges,alerts,labels,latency_s,error"
     )
     rows = [head]
     for c in request.cases:
         m = c.metrics
+        applicable = _cex_applicable(m)
+        cex_found = m.breakdown.get("cex_destination_addresses_found") if m else None
+        cex_expected = m.breakdown.get("cex_destination_addresses_expected") if m else None
         rows.append(
             ",".join(
                 _csv_cell(x)
@@ -119,7 +152,10 @@ def _build_csv(request: ExperimentSaveRequest) -> str:
                     m.address_recall if m else None,
                     m.heuristic_precision if m else None,
                     m.heuristic_recall if m else None,
-                    m.cex_coverage if m else None,
+                    m.cex_coverage if (m and applicable) else None,  # puste dla N/A
+                    ("true" if applicable else "false") if m else None,
+                    cex_found,
+                    cex_expected,
                     c.nodes,
                     c.edges,
                     c.alerts,
