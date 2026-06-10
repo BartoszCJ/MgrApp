@@ -101,17 +101,13 @@ async def build_trace_graph(
         visited.add(addr)
 
         node = nodes.setdefault(addr, GraphNode(address=addr, depth=depth))
-        node.depth = min(node.depth, depth)  # zachowaj minimalna glebokosc
-
-        # Endpoints - pokazujemy w grafie ale nie ekspandujemy
+        node.depth = min(node.depth, depth) 
+       
         if addr != root and addr in endpoints:
             node.is_endpoint = True
             continue
-
-        # Czy ekspandujemy ten poziom?
         if depth >= hops:
             continue
-
         # Pobierz transakcje adresu
         limit = root_max_tx if addr == root else per_hop_max_tx
         sb = start_block if start_block is not None else 0

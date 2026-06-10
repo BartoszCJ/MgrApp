@@ -85,7 +85,7 @@ def detect_tornado(transactions: list[Transaction], root_address: str) -> list[A
         ):
             if not counterparty or counterparty not in db:
                 continue
-            # observed musi istniec i nie byc samym Tornado (pomija Tornado->Tornado)
+
             if not observed or observed in db:
                 continue
 

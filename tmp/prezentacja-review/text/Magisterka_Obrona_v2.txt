@@ -1,0 +1,93 @@
+# Magisterka_Obrona_v2
+## SLIDES
+### ppt/slides/slide1.xml
+OBRONA PRACY MAGISTERSKIEJ Automatyczne wykrywanie i analiza aktywności transakcyjnej w blockchainie po incydentach cyberbezpieczeństwa Bartosz Kloc    ·   nr albumu:  59122 Promotor:  dr inż.  Ruslan   Shevchuk [ Uniwersytet Bielsko-Bialski  WBMiI ]   ·   lipiec 2026
+
+### ppt/slides/slide10.xml
+Prototyp w akcji 10 / 15 [ SCREEN: zakładka Alerts ] alerty  heurystyk   -  Tornado Cash / bridge / CEX, z adresem i poziomem istotności [ SCREE: zakładka Metrics ] 4  metryki + breakdown względem ground truth
+
+### ppt/slides/slide11.xml
+Eksperymenty: 3 rzeczywiste incydenty 11 / 15 Ronin Bridge ~625 mln USD · marzec 2022 Nomad Bridge ~190 mln USD · sierpień 2022 Euler Finance ~197 mln USD · marzec 2023 Metryki oceny Address Recall  -   ile znanych adresów atakującego odnalazł system Heuristic Precision  -   jaka część alertów była trafna Heuristic Recall  -   ile oczekiwanych technik wykryto CEX Coverage  -   czy dotarliśmy do giełd, na które trafiły środki Setup hops = 3 (główny run), okno czasowe incydentu, ground truth z publicznych analiz, cache: pełna powtarzalność.
+
+### ppt/slides/slide12.xml
+Wyniki: hops = 2 vs hops = 3 12 / 15
+
+### ppt/slides/slide13.xml
+Ograniczenia i dalsze prace 13 / 15 Ograniczenia tylko Ethereum / EVM — brak Bitcoina, zależność od zewnętrznych API i jakości ground truth, brak analizy wywołań smart kontraktów (internal calls), heurystyka peel chain generuje false positives (precision ~0.67). Dalsze prace większa baza incydentów i bogatszy ground truth, wsparcie innych sieci (BTC, L2), strojenie progów heurystyk (peel chain), metryka CEX świadoma kierunku transferu (in/out).
+
+### ppt/slides/slide14.xml
+Wnioski 14 / 15 1 Prototyp działa end-to-end od adresu incydentu, przez graf i alerty, po raport z metrykami — jednym kliknięciem. 2 Automatyzuje realną pracę analityka to, co ręcznie zajmuje godziny, system robi w minuty — z powtarzalnym wynikiem. 3 Wyniki są mierzalne i weryfikowalne 4 metryki liczone względem publicznego ground truth; średni Address Recall 69%, CEX Coverage 100% dla Ronin.
+
+### ppt/slides/slide15.xml
+Dziękuję za uwagę Bartosz Kloc
+
+### ppt/slides/slide2.xml
+Plan prezentacji 2 / 15 01 Problem i cel pracy dlaczego śledzenie środków po ataku jest trudne 02 Proponowane rozwiązanie graf transakcyjny BFS + heurystyki + metryki 03 Implementacja i eksperymenty prototyp oraz 3 rzeczywiste incydenty 04 Wyniki i wnioski skuteczność, ograniczenia, dalsze prace
+
+### ppt/slides/slide3.xml
+Motywacja: Ronin Bridge 3 / 15 ~625 mln USD skradzione z Ronin Bridge (Axie Infinity), marzec 2022  -  jeden z największych ataków w historii DeFi Środki natychmiast rozproszone przerzuty przez dziesiątki adresów pośrednich (hopping), pranie przez miksery (Tornado Cash), wypłaty na giełdy scentralizowane (CEX). Po incydencie nie wystarczy stwierdzić, że atak miał  miejsce   -  trzeba odtworzyć dalszy przepływ środków.
+
+### ppt/slides/slide4.xml
+Problem badawczy i cel pracy 4 / 15 Problem dane on-chain są publiczne, ale ich ręczna analiza jest czasochłonna i wymaga eksperta, atakujący aktywnie zacierają ślady: hopping, mixing, bridging, narzędzia komercyjne są drogie i zamknięte (black-box). Cel pracy Opracowanie i eksperymentalne zbadanie prototypu automatyzującego śledzenie środków po cyberatakach: identyfikacja źródła skradzionych środków, śledzenie ich dalszego przepływu, wykrywanie metod ukrywania pochodzenia (mixing, hopping, bridging).
+
+### ppt/slides/slide5.xml
+Zakres i zadania badawcze 5 / 15 Ethereum / EVM 3 incydenty: Ronin · Euler · Nomad analiza grafu transakcyjnego Analiza typów ataków blockchain i istniejących podejść do forensics Opracowanie modelu automatycznego śledzenia transakcji (graf BFS + heurystyki) Implementacja prototypu z wykorzystaniem API Etherscan i Arkham Eksperymenty na rzeczywistych przypadkach i ocena efektywności
+
+### ppt/slides/slide6.xml
+Tło: jak dziś śledzi się środki 6 / 15 Eksploratory blockchain Etherscan i  podobne   -  surowe transakcje, zero automatyzacji śledzenia. Platformy komercyjne Chainalysis, Elliptic, TRM  -  skuteczne, ale drogie i zamknięte (black-box). OSINT / analiza ręczna post-mortemy, śledztwa społeczności (np. ZachXBT)  -  dokładne, ale powolne i niereprodukowalne.
+
+### ppt/slides/slide7.xml
+Proponowane   rozwiązanie 7 / 15 Frontend Next.js + graf → Backend FastAPI (Python) → Źródła danych Etherscan · Arkham → Cache dyskowy, raw JSON → Graf + heurystyki BFS · 4 detektory → Metryki vs ground truth Cache chroni limity API ten sam adres pytany raz; powtórny eksperyment = 0 zapytań na żywo BFS z terminacją znane  endpointy   kończą  ekspansję gałęzi Ocena vs ground truth wyniki porównywane z publicznie udokumentowanymi analizami incydentów
+
+### ppt/slides/slide8.xml
+Metoda śledzenia przepływu 8 / 15 Graf transakcyjny (BFS) start od adresu atakującego (root), ekspansja po kolejnych transakcjach wychodzących, hops = głębokość analizy (1–3), terminacja na znanych endpointach: CEX, bridge, mixer, deduplikacja adresów i limit transakcji na węzeł. Heurystyki detekcji Tornado Cash  -   depozyty do miksera (pranie) Bridges  -   transfery między sieciami CEX deposit  - wypłaty  na  giełdy   -  punkt styku z KYC Peel chain  -   łańcuszek drobnych odpięć od głównej kwoty
+
+### ppt/slides/slide9.xml
+Implementacja prototypu 9 / 15 Stack Backend: Python + FastAPI Frontend: Next.js + TypeScript Graf UI: @xyflow/react Dane: Etherscan + Arkham API Cache dyskowy odpowiedzi API CLI + 49 testów jednostkowych UI:  zakładki Overview / Graph / Alerts / Transactions / Labels / Metrics; przycisk „Eksperyment 3×" odpala wszystkie case'y i zapisuje raport (json/md/csv).
+
+## SPEAKER NOTES
+### ppt/notesSlides/notesSlide1.xml
+Dzień dobry. Nazywam się Bartosz Kloc. Temat mojej pracy to automatyczne wykrywanie i analiza aktywności transakcyjnej w blockchainie po incydentach cyberbezpieczeństwa — czyli system, który po ataku na protokół kryptowalutowy automatycznie śledzi, dokąd popłynęły skradzione środki. 1
+
+### ppt/notesSlides/notesSlide10.xml
+Dwa zrzuty z działającego prototypu. Po lewej zakładka Alerts — każdy alert heurystyki wskazuje konkretny adres i poziom istotności; widać wykrycia Tornado Cash i wpłat na giełdy. Po prawej zakładka Metrics — system sam liczy cztery metryki względem ground truth i pokazuje breakdown, co dokładnie znalazł, a czego nie. 10
+
+### ppt/notesSlides/notesSlide11.xml
+Eksperymenty na trzech incydentach: Ronin, Nomad i Euler — razem ponad miliard dolarów strat. Cztery metryki: Address Recall mówi, ile znanych adresów atakującego system odnalazł; Heuristic Precision — jaka część alertów była trafna; Heuristic Recall — ile oczekiwanych technik wykryto; CEX Coverage — czy doszliśmy do giełd, na które realnie trafiły środki. Główny run: hops=3, okno czasowe incydentu, ground truth z publicznych analiz, cache zapewnia powtarzalność. 11
+
+### ppt/notesSlides/notesSlide12.xml
+Wyniki. Tabela: główny run hops=3 — Nomad z najwyższym Address Recall 88%, średnia 69%. Kluczowe porównanie po prawej: dla Ronin przejście z dwóch na trzy hopy podniosło CEX Coverage z 0% do 100% — system dotarł do 8 adresów giełd z ground truth — ale graf urósł z 101 do 475 węzłów. Średni Address Recall wzrósł z 55% do 69%. Wniosek: głębokość analizy realnie zwiększa skuteczność, kosztem rozmiaru grafu. N/A dla Euler i Nomad: ich ground truth nie zawiera adresów giełd — nie ma czego mierzyć. 12
+
+### ppt/notesSlides/notesSlide13.xml
+Ograniczenia mówię wprost: system działa tylko na Ethereum i sieciach EVM, zależy od zewnętrznych API, nie analizuje wywołań wewnętrznych smart kontraktów, a heurystyka peel chain daje false positives — stąd precision około 0.67. Dalsze prace: większa baza incydentów, inne sieci, strojenie progów i metryka CEX rozróżniająca kierunek transferu. 13
+
+### ppt/notesSlides/notesSlide14.xml
+Trzy wnioski. Po pierwsze: prototyp działa end-to-end — od adresu po raport z metrykami. Po drugie: automatyzuje pracę, która ręcznie zajmuje analitykom godziny. Po trzecie: wyniki są mierzalne i weryfikowalne względem publicznego ground truth — średni Address Recall 69%, a dla Ronin pełne dotarcie do giełd docelowych. 14
+
+### ppt/notesSlides/notesSlide15.xml
+Dziękuję za uwagę i zapraszam do pytań. Przygotowane odpowiedzi: dlaczego BFS a nie DFS (poziomy = hopy, naturalna kontrola głębokości); dlaczego Arkham (darmowe API z etykietami adresów); czemu precision 0.67 (peel chain false positive — opisane i zaplanowane strojenie); czy system działa na żywo (tak, ale cache pozwala odtworzyć eksperyment bez zapytań). 15
+
+### ppt/notesSlides/notesSlide2.xml
+Prezentacja ma cztery części: problem i cel pracy, proponowane rozwiązanie, implementacja z eksperymentami na trzech rzeczywistych incydentach, oraz wyniki i wnioski. 2
+
+### ppt/notesSlides/notesSlide3.xml
+Hook: w marcu 2022 z mostu Ronin skradziono około 625 milionów dolarów. Środki natychmiast rozproszono po dziesiątkach adresów, części użyto w mikserze Tornado Cash, część trafiła na giełdy. Kluczowa myśl: po takim incydencie nie wystarczy wiedzieć, że atak był — trzeba odtworzyć, dokąd popłynęły pieniądze. Ręcznie to żmudna praca analityków. 3
+
+### ppt/notesSlides/notesSlide4.xml
+Problem: dane w blockchainie są jawne, ale ręczna analiza tysięcy transakcji jest czasochłonna, a atakujący celowo zacierają ślady. Komercyjne narzędzia jak Chainalysis są drogie i zamknięte. Cel pracy: opracowanie i eksperymentalne zbadanie prototypu, który automatyzuje śledzenie środków — od identyfikacji źródła, przez przepływ, po wykrywanie technik ukrywania pochodzenia. 4
+
+### ppt/notesSlides/notesSlide5.xml
+Zakres ograniczyłem świadomie: sieć Ethereum i kompatybilne EVM, trzy dobrze udokumentowane incydenty — Ronin, Euler Finance i Nomad Bridge — oraz analiza grafu transakcyjnego. Cztery zadania badawcze: analiza ataków i istniejących podejść, model śledzenia, prototyp na API Etherscan i Arkham, oraz eksperymenty z oceną efektywności. W pracy zadania są opisane szerzej, w siedmiu punktach. 5
+
+### ppt/notesSlides/notesSlide6.xml
+Trzy istniejące podejścia: eksploratory typu Etherscan dają surowe dane bez automatyzacji; platformy komercyjne jak Chainalysis czy Elliptic są skuteczne, ale drogie i zamknięte; analiza ręczna i OSINT są dokładne, ale powolne. Moja praca lokuje się pomiędzy: otwarty prototyp akademicki, który automatyzuje analizę po incydencie i daje mierzalne wyniki. 6
+
+### ppt/notesSlides/notesSlide7.xml
+Architektura: frontend w Next.js z interaktywnym grafem, backend w FastAPI. Backend pobiera transakcje z Etherscan i etykiety adresów z Arkham, wszystko przechodzi przez dyskowy cache. Z danych budowany jest graf BFS, na nim działają heurystyki, a wyniki ocenia moduł metryk porównujący z ground truth. Trzy kluczowe decyzje projektowe: cache chroni darmowe limity API, BFS kończy ekspansję na znanych endpointach, a ocena jest zawsze względem publicznie udokumentowanych analiz. 7
+
+### ppt/notesSlides/notesSlide8.xml
+Metoda: budujemy graf metodą BFS od adresu atakującego. Każdy poziom grafu to jeden hop — analizuję do trzech. Graf kończy ekspansję, gdy trafi na znany endpoint — giełdę, most albo mikser. Na całym grafie działają cztery heurystyki: depozyty do Tornado Cash, transfery przez bridge'e, wpłaty na CEX — czyli punkt, gdzie pojawia się KYC i realna szansa identyfikacji — oraz peel chain. Ważne: heurystyki analizują cały graf, nie tylko bezpośrednie transakcje roota, więc łapią pranie przez pośredników. 8
+
+### ppt/notesSlides/notesSlide9.xml
+Prototyp to monorepo: backend w FastAPI, frontend w Next.js z interaktywnym grafem na xyflow. Dane z Etherscan i Arkham przechodzą przez dyskowy cache. Całość ma CLI i 49 testów jednostkowych. Na slajdzie pokazuję graf incydentu Ronin — węzły to adresy, kolory to kategorie z Arkham: hacker, mixer, bridge, CEX. Przycisk Eksperyment 3x uruchamia wszystkie trzy case'y i zapisuje porównywalny raport. 9
+
