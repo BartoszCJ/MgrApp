@@ -101,8 +101,8 @@ async def build_trace_graph(
         visited.add(addr)
 
         node = nodes.setdefault(addr, GraphNode(address=addr, depth=depth))
-        node.depth = min(node.depth, depth) 
-       
+        node.depth = min(node.depth, depth)
+
         if addr != root and addr in endpoints:
             node.is_endpoint = True
             continue

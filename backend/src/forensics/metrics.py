@@ -1,22 +1,3 @@
-"""Metryki efektywnosci sledzenia: precision, recall, coverage, latency.
-
-Co to robi:
-- laduje ground truth dla wybranego case study z `data/ground_truth/<case>.json`,
-- porownuje wynik trace (graf BFS + alerty heurystyk) z oczekiwanym wynikiem,
-- liczy 4 metryki + breakdown z surowymi liczbami dla UI.
-
-Po co:
-- realizuje zadanie 7 z tematu pracy magisterskiej Ruslana ("ocena efektywnosci"),
-- daje konkretne liczby do rozdzialu wynikow zamiast jakosciowych ocen,
-- precision/recall vs publiczne raporty (Chainalysis, Elliptic, Mandiant) to standard branzowy.
-
-Mapowanie heurystyk -> typy alertow (z modulow heuristics/):
-- tornado_cash -> 'tornado_cash_deposit', 'tornado_cash_withdraw'
-- cex          -> 'cex_outgoing', 'cex_incoming'
-- bridges      -> 'bridge_outgoing', 'bridge_incoming'
-- peel_chain   -> 'peel_chain'
-"""
-
 from __future__ import annotations
 
 import json
@@ -45,14 +26,7 @@ class GroundTruthError(Exception):
 
 @lru_cache(maxsize=8)
 def load_ground_truth(case_name: str) -> dict[str, Any]:
-    """Laduje plik ground truth dla case study (cache na nazwie).
 
-    Args:
-        case_name: np. 'ronin', 'euler', 'nomad' - musi byc nazwa pliku bez .json.
-
-    Raises:
-        GroundTruthError: jesli plik nie istnieje lub JSON jest popsuty.
-    """
     path = _GROUND_TRUTH_DIR / f"{case_name}.json"
     if not path.exists():
         raise GroundTruthError(f"Brak ground truth dla case '{case_name}': {path}")
@@ -64,11 +38,7 @@ def load_ground_truth(case_name: str) -> dict[str, Any]:
 
 
 def _extract_expected_addresses(ground_truth: dict[str, Any]) -> set[str]:
-    """Zwraca zbior wszystkich 0x... adresow ze wszystkich sekcji ground_truth.addresses.*
 
-    Pomija wartosci ktore nie sa adresami Ethereum (np. logiczne nazwy
-    'tornado_cash_pools', 'renBTC_bridge' w nomad.json).
-    """
     expected: set[str] = set()
     sections = ground_truth.get("addresses", {})
     for entries in sections.values():
@@ -146,16 +116,7 @@ def _allowed_categories(ground_truth: dict[str, Any]) -> set[str]:
 
 
 def _cex_exchanges_found(trace_result: TraceResult) -> set[str]:
-    """Surowy sygnal: nazwy giełd z alertow CEX (z lokalnej cex.json).
 
-    UWAGA: to NIE jest juz zrodlo cex_coverage (Opcja B liczy po adresach
-    destinations_cex z ground truth). Tu zostaje tylko jako informacyjny
-    `cex_alert_exchanges_detected_raw` w breakdown.
-
-    Nazwa wyciagana z `Alert.metadata.name` (ustawiane przez known_address.py).
-    Lowercase do porownywania. Wycinamy szczegóły typu 'Binance Hot Wallet 7'
-    do samego 'binance' przez heurystyke 'pierwsze slowo'.
-    """
     exchanges: set[str] = set()
     cex_types = _HEURISTIC_TO_ALERT_TYPES["cex"]
     for alert in trace_result.alerts:
@@ -171,12 +132,7 @@ def _cex_exchanges_found(trace_result: TraceResult) -> set[str]:
 
 
 def _cex_destinations(ground_truth: dict[str, Any]) -> dict[str, str]:
-    """Mapa adres(lower) -> nazwa gieldy z ground_truth.addresses.destinations_cex.
 
-    To jest baza OCENY dla cex_coverage (Opcja B): liczymy ile udokumentowanych
-    adresow CEX-deposit nasz BFS faktycznie osiagnal. Niezalezne od lokalnej
-    cex.json (baza DETEKCYJNA heurystyki), zeby metryka nie byla cyrkularna.
-    """
     out: dict[str, str] = {}
     entries = ground_truth.get("addresses", {}).get("destinations_cex", [])
     if not isinstance(entries, list):
@@ -204,16 +160,7 @@ def compute_metrics(
     case_name: str,
     latency_seconds: float,
 ) -> MetricsReport:
-    """Liczy metryki efektywnosci porownujac trace z ground truth.
 
-    Args:
-        trace_result: pelen wynik z `/api/trace` (graf + alerty + labels).
-        case_name: np. 'ronin', 'euler', 'nomad'.
-        latency_seconds: zmierzony czas calego endpointu.
-
-    Raises:
-        GroundTruthError: gdy nie ma pliku dla tego case'a.
-    """
     ground_truth = load_ground_truth(case_name)
 
     # Address recall ----------------------------------------------------------
@@ -237,9 +184,6 @@ def compute_metrics(
         len(expected_categories),
     )
 
-    # CEX coverage (Opcja B) --------------------------------------------------
-    # Liczona po ADRESACH destinations_cex z ground truth, NIE po nazwach z cex.json.
-    # cex.json zostaje baza detekcyjna heurystyki, ground truth - baza oceny.
     cex_destinations = _cex_destinations(ground_truth)  # adres(lower) -> nazwa gieldy
     cex_dest_expected = set(cex_destinations)
     cex_dest_found = cex_dest_expected & found_addrs

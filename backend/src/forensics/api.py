@@ -1,11 +1,3 @@
-"""FastAPI app — REST API dla frontendu.
-
-Co to robi:
-- wystawia endpointy HTTP do ktorych gada frontend,
-- konfiguruje CORS zeby Next.js mogl wolac z innego portu,
-- dokumentacja automatycznie pod /docs (Swagger UI).
-"""
-
 import time
 from contextlib import asynccontextmanager
 
@@ -77,20 +69,10 @@ async def root() -> dict[str, str]:
 
 @app.post("/api/trace", response_model=TraceResult)
 async def trace(request: TraceRequest) -> TraceResult:
-    """Pobierz BFS graf przeplywu dla adresu + etykiety z Arkham + heurystyki.
-
-    Krok po kroku:
-      1. BFS przez `request.hops` poziomow - dla kazdego nowego adresu pobieramy
-         tx z Etherscan (ETH + ERC-20). Znane endpointy (mixer/CEX/bridge) sa terminale.
-      2. Zbieramy unikalne adresy z wszystkich poziomow.
-      3. Arkham batch lookup: pytamy o etykiete dla kazdego adresu rownolegle.
-      4. Heurystyki: Tornado Cash / bridges / CEX deposits na pelnym zestawie tx.
-      5. Tabela transakcji w UI to nadal ostatnie N z hop 0 (zeby nie zalac UI).
-    """
+    """Buduje ograniczony graf aktywności transakcyjnej i zwraca etykiety, alerty oraz metryki."""
     address = request.address.lower()
     started_at = time.perf_counter()
-    cache.begin_request(request.refresh)  # reset stat hit/miss + tryb refresh
-
+    cache.begin_request(request.refresh)
     try:
         all_txs, graph = await build_trace_graph(
             etherscan=app.state.etherscan,
@@ -104,7 +86,7 @@ async def trace(request: TraceRequest) -> TraceResult:
     except EtherscanError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    # Tabela: bierzemy tx tylko dla roota (zeby tabela nie miala 2000 wierszy z hop 2+)
+
     root_txs = [
         tx
         for tx in all_txs
@@ -133,7 +115,7 @@ async def trace(request: TraceRequest) -> TraceResult:
             logger.warning("Arkham batch failed: {}", exc)
             notes.append("Arkham batch failed (zobacz logi backendu).")
 
-    # Heurystyki na pelnym zestawie tx (caly graf, nie tylko hop 0)
+
     alerts = [
         *detect_tornado(all_txs, address),
         *detect_known_group(all_txs, address, "bridges.json", severity="warning"),

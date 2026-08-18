@@ -9,8 +9,8 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "install:all": "npm install && uv --project backend sync --extra dev && npm --prefix frontend install",
     "build:frontend": "npm --prefix frontend run build",
-    "test:backend": "uv --project backend run pytest backend/tests",
-    "lint:backend": "uv --project backend run ruff check backend/src"
+    "test:backend": "uv --project backend run --extra dev pytest backend/tests",
+    "lint:backend": "uv --project backend run --extra dev ruff check backend/src"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

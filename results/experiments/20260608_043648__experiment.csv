@@ -1,4 +1,0 @@
-case,address,hops,start_block,end_block,cache_mode,address_recall,heuristic_precision,heuristic_recall,cex_coverage,nodes,edges,alerts,labels,latency_s,error
-ronin,0x098B716B8Aaf21512996dC57EB0615e2383E2f96,3,14442835,14492835,normal,0.6957,0.6667,0.6667,1.0,475,910,43,329,6.907,
-euler,0xb2698c2D99aD2c302a95a8DB26B08D17a77cEDd4,3,16817996,16867996,normal,0.5,0.3333,0.5,0.0,321,498,16,201,3.844,
-nomad,0xa8c83b1b30291a3a1a118058b5445cc83041cd9d,3,15259101,15309101,normal,0.875,0.6667,0.6667,0.0,862,2146,87,620,12.895,

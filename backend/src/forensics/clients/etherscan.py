@@ -1,19 +1,4 @@
-"""Klient Etherscan API V2 (multichain).
 
-Co to robi:
-- pobiera transakcje danego adresu Ethereum,
-- konwertuje surowe dane Etherscan do naszych modeli pydantic,
-- bazowy klient na ktorym oprzemy graf.
-
-Dokumentacja Etherscan V2: https://docs.etherscan.io/etherscan-v2
-V1 -> V2: https://docs.etherscan.io/v2-migration
-
-Roznica V1 vs V2:
-- V1 URL: https://api.etherscan.io/api
-- V2 URL: https://api.etherscan.io/v2/api z parametrem chainid
-- chainid=1 dla Ethereum mainnet, 56 dla BSC, 137 dla Polygon, 42161 dla Arbitrum itd.
-- V1 zostal deprecated 31 maja 2025.
-"""
 
 import asyncio
 import time

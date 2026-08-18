@@ -1,15 +1,3 @@
-"""Generyczna heurystyka detekcji kontaktu ze znana grupa adresow.
-
-Uzywana dla bridges i CEX deposits. Tornado ma osobny modul bo ma denominacje
-i jest klasyfikowany jako critical, nie warning.
-
-Schemat JSON w `data/known_addresses/<group>.json`:
-{
-  "name": "Cross-Chain Bridges",
-  "category": "bridge",
-  "addresses": [{"address": "0x...", "name": "Wormhole"}, ...]
-}
-"""
 
 from __future__ import annotations
 

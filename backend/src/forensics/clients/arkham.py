@@ -1,20 +1,4 @@
-"""Klient Arkham Intelligence API.
 
-Co to robi:
-- pyta Arkham o etykiete dla danego adresu (kto to jest),
-- zwraca strukture `AddressLabel` (entity, label, category, source),
-- batch lookup wielu adresow rownolegle (asyncio.gather z limitem rate).
-
-Dokumentacja: https://codex.arkm.com/arkham-api
-Endpoint adresu: GET https://api.arkm.com/intelligence/address/{address}/all
-Auth: header `API-Key: <key>`.
-Rate limit basic tier: ~20 req/s.
-
-UWAGA: format response Arkhama nie jest super dobrze udokumentowany publicznie.
-Klient stara sie wyciagnac to co najwazniejsze (entity name, type) i ignorowac reszte.
-Jesli adres jest nieznany, Arkham moze zwrocic 404, 200 z pustym body,
-albo strukture bez `arkhamEntity`.
-"""
 
 import asyncio
 from typing import Any
@@ -27,7 +11,7 @@ from forensics.config import settings
 from forensics.core.models import AddressLabel
 
 ARKHAM_BASE_URL = "https://api.arkm.com"
-DEFAULT_CONCURRENCY = 8  # liczba rownoleglych zapytan, ponizej rate limita 20/s
+DEFAULT_CONCURRENCY = 8
 
 
 class ArkhamError(Exception):
